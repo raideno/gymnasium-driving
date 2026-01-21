@@ -1,0 +1,14 @@
+- [x] Have all the dimensions be to scale, replicate parking lot, renault zoe dimensions, etc.
+- [ ] Implement some control algorithms.
+  - [ ] Rule based.
+  - [ ] Discretized Q-Learning.
+  - [ ] Policy Gradient.
+  - [ ] Imitation Learning. https://www.youtube.com/watch?v=GDmhrAHxgQE
+  - [ ] Neural Network Based Controllers, etc.
+  - [x] Pure Pursuit.
+  - [x] Stanley.
+  - [x] PID.
+  - [x] Clothoids.
+- [x] Add real timing, fps and a controllable speed up of time.
+- [x] Add collision with road sides. Enabled overall and controllable on road network on creation on each individual segment.
+- [ ] Add "Distance" to lane center into the observation data.
