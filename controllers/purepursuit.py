@@ -1,15 +1,6 @@
 import numpy as np
 
 class PurePursuitController:
-    """
-    Simple Pure Pursuit controller for path following.
-    
-    The algorithm:
-    1. Find the closest point on the path to the vehicle
-    2. Find a lookahead point on the path ahead of the vehicle
-    3. Compute steering angle to reach the lookahead point using bicycle model geometry
-    """
-    
     def __init__(
         self,
         lookahead_distance: float = 5.0,
@@ -20,8 +11,6 @@ class PurePursuitController:
         kp_velocity: float = 1.0,
     ):
         self.lookahead_distance = lookahead_distance
-        self.min_lookahead = min_lookahead
-        self.max_lookahead = max_lookahead
         self.wheelbase = wheelbase
         self.target_velocity = target_velocity
         self.kp_velocity = kp_velocity
@@ -44,18 +33,9 @@ class PurePursuitController:
             lookahead_point: The target point to steer towards
             lookahead_idx: Index of the lookahead point in the path
         """
-        # Adaptive lookahead based on velocity
-        lookahead = np.clip(
-            self.lookahead_distance + 0.5 * abs(velocity),
-            self.min_lookahead,
-            self.max_lookahead
-        )
+        car_to_waypoint_distances = np.linalg.norm(path - position, axis=1)
+        closest_idx = np.argmin(car_to_waypoint_distances)
         
-        # Find closest point on path
-        distances = np.linalg.norm(path - position, axis=1)
-        closest_idx = np.argmin(distances)
-        
-        # Search forward from closest point to find lookahead point
         n_points = len(path)
         cumulative_dist = 0.0
         lookahead_idx = closest_idx
@@ -67,7 +47,7 @@ class PurePursuitController:
             segment_dist = np.linalg.norm(path[next_idx] - path[idx])
             cumulative_dist += segment_dist
             
-            if cumulative_dist >= lookahead:
+            if cumulative_dist >= self.lookahead_distance:
                 lookahead_idx = next_idx
                 break
         
@@ -79,24 +59,11 @@ class PurePursuitController:
         heading: float,
         lookahead_point: np.ndarray
     ) -> float:
-        """
-        Compute steering angle using pure pursuit geometry.
-        
-        Args:
-            position: Current vehicle position (x, y)
-            heading: Current heading in radians
-            lookahead_point: Target point to steer towards
-            
-        Returns:
-            steering_angle: Steering command in radians
-        """
-        # Vector from vehicle to lookahead point
         dx = lookahead_point[0] - position[0]
         dy = lookahead_point[1] - position[1]
         
-        # Distance to lookahead point
-        ld = np.sqrt(dx**2 + dy**2)
-        if ld < 0.1:
+        distance_to_lookahead = np.sqrt(dx**2 + dy**2)
+        if distance_to_lookahead < 0.1:
             return 0.0
         
         # Transform to vehicle coordinate frame
@@ -107,8 +74,8 @@ class PurePursuitController:
         # Normalize to [-pi, pi]
         alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
         
-        # Pure pursuit steering formula: delta = arctan(2 * L * sin(alpha) / ld)
-        steering = np.arctan2(2.0 * self.wheelbase * np.sin(alpha), ld)
+        # delta = arctan(2 * L * sin(alpha) / distance_to_lookahead)
+        steering = np.arctan2(2.0 * self.wheelbase * np.sin(alpha), distance_to_lookahead)
         
         return steering
     
@@ -149,19 +116,17 @@ class PurePursuitController:
         heading = observation["heading"][0]
         velocity = observation["velocity"][0]
         
-        # Find lookahead point
         lookahead_point, _ = self.find_lookahead_point(position, path, velocity)
         
-        # Compute controls
         steering = self.compute_steering(position, heading, lookahead_point)
         acceleration = self.compute_acceleration(velocity)
         
-        # Clip to action bounds
         steering = np.clip(steering, -max_steering, max_steering)
         acceleration = np.clip(acceleration, -max_acceleration, max_acceleration)
-        # Convert acceleration to [0, 1] range
+        
         accel_normalized = acceleration / max_acceleration
-        accel_action = (accel_normalized + 1.0) / 2.0  # Convert [-1, 1] to [0, 1]
+        # NOTE: convert [-1, 1] to [0, 1]
+        accel_action = (accel_normalized + 1.0) / 2.0
 
         return np.array([steering, accel_action, 0.0, 0.0], dtype=np.float32)
         
@@ -171,35 +136,24 @@ class PurePursuitController:
         observation: dict,
         path: np.ndarray,
     ) -> None:
-        """
-        Draw debug visualization on the environment.
-        
-        Args:
-            env: The BicycleCarEnv instance (must have overlay methods)
-            observation: Environment observation dict
-            path: Path waypoints as (N, 2) array
-        """
         position = observation["position"]
         velocity = observation["velocity"][0]
         
-        # Find lookahead point
         lookahead_point, lookahead_idx = self.find_lookahead_point(
             position, path, velocity
         )
         
-        # Draw lookahead point
         env.overlay_manager.add_circle(
             center=tuple(lookahead_point),
             radius=0.5,
-            color=(255, 165, 0),  # Orange
+            color=(255, 165, 0),
             width=0,
         )
         
-        # Draw line from vehicle to lookahead point
         env.overlay_manager.add_line(
             start=tuple(position),
             end=tuple(lookahead_point),
-            color=(255, 165, 0),  # Orange
+            color=(255, 165, 0),
             width=2,
         )
     

@@ -1,6 +1,4 @@
-import time
 import typing
-import pygame
 import gymnasium
 
 import numpy as np
@@ -396,28 +394,6 @@ class BicycleCarEnv(gymnasium.Env):
         truncated = False
         reward = 0.0
 
-        goal_dist = info["goal_distance"]
-        if goal_dist <= self.goal_radius:
-            terminated = True
-            reward = 100.0
-        elif self._check_collision():
-            terminated = True
-            reward = -100.0
-        elif not self._in_bounds():
-            truncated = True
-            reward = -50.0
-        elif self.road_network is not None:
-            if self.road_network.is_off_road(self.state[:2]):
-                if self.enforce_road:
-                    terminated = True
-                    reward = -100.0
-                else:
-                    reward = self.off_road_penalty - 0.01 * goal_dist
-            else:
-                reward = -0.1 - 0.01 * goal_dist
-        else:
-            reward = -0.1 - 0.01 * goal_dist
-
         if self.render_mode == "human":
             self._render_frame()
 
@@ -501,13 +477,6 @@ class BicycleCarEnv(gymnasium.Env):
         }
 
     def _get_car_corners(self) -> np.ndarray:
-        """
-        Get the four corners of the car in world coordinates.
-        
-        Returns:
-            corners: (4, 2) array of corner positions
-                     [front-right, front-left, rear-left, rear-right]
-        """
         x, y, theta, _ = self.state
         half_length = self.car_length / 2
         half_width = self.car_width / 2
@@ -531,12 +500,6 @@ class BicycleCarEnv(gymnasium.Env):
         return corners_world
     
     def _check_collision(self) -> bool:
-        """
-        Check if car collides with any obstacle.
-        
-        Uses the car's full dimensions by checking all four corners
-        and additional points along the car's edges.
-        """
         corners = self._get_car_corners()
         
         # Check corners against obstacles
@@ -584,13 +547,11 @@ class BicycleCarEnv(gymnasium.Env):
         return min_x <= x <= max_x and min_y <= y <= max_y
 
     def render(self) -> np.ndarray | None:
-        """Render the environment."""
         if self.render_mode == "rgb_array":
             return self._render_frame()
         return None
     
     def _render_frame(self) -> np.ndarray | None:
-        """Render a single frame with proper meter-based scaling."""
         return self.renderer.render_frame(
             state=self.state,
             spawn_pos=self.spawn_pos,
@@ -613,5 +574,4 @@ class BicycleCarEnv(gymnasium.Env):
         )
 
     def close(self) -> None:
-        """Clean up resources."""
         self.renderer.close()
