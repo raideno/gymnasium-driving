@@ -16,7 +16,6 @@ class BicycleCarEnv(gymnasium.Env):
 
     All dimensions are in meters, velocities in m/s.
     """
-
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
     DEFAULT_CAR_LENGTH = 4.5
@@ -99,18 +98,13 @@ class BicycleCarEnv(gymnasium.Env):
             scale_y = (screen_size[1] - 40) / self.world_size[1]
             self.pixels_per_meter = min(scale_x, scale_y)
 
-        # Action space: [steering, throttle, brake, reverse] (CARLA-compatible)
-        # steering: -max_steering to max_steering
-        # throttle: 0 to 1 (0 = no acceleration, 1 = full acceleration)
-        # brake: 0 to 1 (0 = no braking, 1 = full brake)
-        # reverse: 0 or 1 (0 = forward, 1 = reverse)
+        # steering, throttle, brake, reverse
         self.action_space = gymnasium.spaces.Box(
             low=np.array([-max_steering, 0.0, 0.0, 0.0], dtype=np.float32),
             high=np.array([max_steering, 1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
 
-        # Observation space
         self.observation_space = gymnasium.spaces.Dict(
             {
                 "position": gymnasium.spaces.Box(
@@ -156,24 +150,22 @@ class BicycleCarEnv(gymnasium.Env):
             }
         )
 
-        # Internal state
         self.state = None
         
-        # Path planning
         self.global_path = None  # Will store waypoints as (N, 2) array
         self._compute_global_path()
 
-        # Episode data tracking for metrics
-        self._episode_actions = []
-        self._episode_positions = []
-        self._episode_steering_angles = []
-        self._episode_on_road_flags = []
-        self._episode_velocities = []
-        self._episode_headings = []
-        self._episode_terminated = False
-        self._episode_truncated = False
+        self._episode_data = {
+            'actions': [],
+            'positions': [],
+            'steering_angles': [],
+            'on_road': [],
+            'velocities': [],
+            'headings': [],
+            'terminated': False,
+            'truncated': False
+        }
 
-        # Helper classes
         self.overlay_manager = OverlayManager()
         self.performance_tracker = PerformanceTracker(show_performance=True)
         self.renderer = Renderer(
@@ -344,14 +336,14 @@ class BicycleCarEnv(gymnasium.Env):
         self.performance_tracker.reset()
 
         # Clear episode data tracking
-        self._episode_actions = []
-        self._episode_positions = []
-        self._episode_steering_angles = []
-        self._episode_on_road_flags = []
-        self._episode_velocities = []
-        self._episode_headings = []
-        self._episode_terminated = False
-        self._episode_truncated = False
+        self._episode_data['actions'] = []
+        self._episode_data['positions'] = []
+        self._episode_data['steering_angles'] = []
+        self._episode_data['on_road'] = []
+        self._episode_data['velocities'] = []
+        self._episode_data['headings'] = []
+        self._episode_data['terminated'] = False
+        self._episode_data['truncated'] = False
 
         observation = self._get_observation()
         info = self._get_info()
@@ -367,11 +359,11 @@ class BicycleCarEnv(gymnasium.Env):
         dict[str, typing.Any], float, bool, bool, dict[str, typing.Any]
     ]:
         # Store data before step for metrics (capture the state before action is applied)
-        self._episode_positions.append(self.state[:2].copy())
-        self._episode_velocities.append(float(self.state[3]))
-        self._episode_headings.append(float(self.state[2]))
-        self._episode_actions.append(action.copy())
-        self._episode_steering_angles.append(float(action[0]))
+        self._episode_data['positions'].append(self.state[:2].copy())
+        self._episode_data['velocities'].append(float(self.state[3]))
+        self._episode_data['headings'].append(float(self.state[2]))
+        self._episode_data['actions'].append(action.copy())
+        self._episode_data['steering_angles'].append(float(action[0]))
         
         steering = np.clip(action[0], -self.max_steering, self.max_steering)
         
@@ -423,7 +415,8 @@ class BicycleCarEnv(gymnasium.Env):
         
         # TODO: added for tracking
         # Store on_road flag after state update
-        self._episode_on_road_flags.append(int(observation["on_road"]))
+        self._episode_data['on_road'].append(int(observation["on_road"]))
+        # self._episode_on_road_flags.append(int(observation["on_road"]))
 
         terminated = False
         truncated = False
@@ -449,8 +442,10 @@ class BicycleCarEnv(gymnasium.Env):
             else:
                 reward = -0.1 - 0.01 * goal_dist
         # Store episode termination status
-        self._episode_terminated = terminated
-        self._episode_truncated = truncated
+        self._episode_data['terminated'] = terminated
+        self._episode_data['truncated'] = truncated
+        # self._episode_terminated = terminated
+        # self._episode_truncated = truncated
 
         # else:
         #     reward = -0.1 - 0.01 * goal_dist
@@ -649,14 +644,7 @@ class BicycleCarEnv(gymnasium.Env):
                 - 'truncated': Whether episode was truncated
         """
         return {
-            'actions': self._episode_actions.copy(),
-            'positions': self._episode_positions.copy(),
-            'steering_angles': self._episode_steering_angles.copy(),
-            'on_road': self._episode_on_road_flags.copy(),
-            'velocities': self._episode_velocities.copy(),
-            'headings': self._episode_headings.copy(),
-            'terminated': self._episode_terminated,
-            'truncated': self._episode_truncated,
+            **self._episode_data,
         }
 
     def close(self) -> None:

@@ -26,7 +26,7 @@ class PathObservationWrapper(gymnasium.ObservationWrapper):
         num_lookahead_points: int = 3,
         lookahead_distances: typing.Tuple[float, ...] = (2.0, 5.0, 10.0),
       
-        num_obstacle_rays: int = 8,  # Number of rays around the vehicle
+        num_obstacle_rays: int = 32,  # Number of rays around the vehicle
         max_obstacle_distance: float = 20.0,  # Max detection range
     ):
         super().__init__(env)
