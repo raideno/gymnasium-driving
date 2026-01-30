@@ -329,9 +329,9 @@ class PathObservationWrapper(gymnasium.ObservationWrapper):
 
 class DiscreteActionWrapper(gymnasium.ActionWrapper):
     """
-    Converts discrete actions to continuous [steering, acceleration, brake, handbrake].
+    Converts discrete actions to continuous [steering, throttle, brake] (CARLA-compatible).
     
-    Creates a grid of (steering, acceleration) combinations for DQN.
+    Creates a grid of (steering, throttle) combinations for DQN.
     """
     
     def __init__(
@@ -363,8 +363,8 @@ class DiscreteActionWrapper(gymnasium.ActionWrapper):
         self.action_space = gymnasium.spaces.Discrete(len(self.action_map))
     
     def action(self, action: int) -> np.ndarray:
-        steering, accel = self.action_map[action]
-        return np.array([steering, accel, 0.0, 0.0], dtype=np.float32)
+        steering, throttle = self.action_map[action]
+        return np.array([steering, throttle, 0.0, 0.0], dtype=np.float32)
 
 
 class DrivingRewardWrapper(gymnasium.Wrapper):
@@ -721,7 +721,7 @@ class DQNController:
             deterministic: Whether to use deterministic actions
             
         Returns:
-            action: [steering, acceleration, brake, handbrake] array
+            action: [steering, throttle, brake] array (CARLA-compatible)
         """
         if self.model is None:
             raise RuntimeError("Model not trained or loaded. Call train() or load() first.")
@@ -744,12 +744,12 @@ class DQNController:
         discrete_action, _ = self.model.predict(flat_obs, deterministic=deterministic)
         
         # Convert to continuous action
-        steering, accel = self.action_map[int(discrete_action)]
+        steering, throttle = self.action_map[int(discrete_action)]
         
         # Clip steering to max
         steering = np.clip(steering, -max_steering, max_steering)
         
-        return np.array([steering, accel, 0.0, 0.0], dtype=np.float32)
+        return np.array([steering, throttle, 0.0, 0.0], dtype=np.float32)
     
     def _create_minimal_obs(self, observation: dict) -> np.ndarray:
         """Create minimal flat observation when wrapper isn't available."""
@@ -805,28 +805,264 @@ class DQNController:
         """
         Draw debug visualization.
         
-        Shows the discrete action space and current selected action.
+        Shows:
+        - Obstacle raycasts with hit distances
+        - Lookahead points on the path
+        - Current action in the discrete action grid
+        - Heading error arrow
+        - Lane centering indicator
         """
-        if self.model is None:
+        if not hasattr(env, 'overlay_manager'):
             return
         
-        # Get current action for visualization
-        try:
-            if self._obs_wrapper is not None:
-                self._obs_wrapper.set_path(path)
-                flat_obs = self._obs_wrapper.observation(observation)
-            else:
-                flat_obs = self._create_minimal_obs(observation)
+        position = observation["position"]
+        heading = observation["heading"][0]
+        velocity = observation["velocity"][0]
+        
+        # Colors
+        COLOR_RAY_CLEAR = (100, 200, 100)      # Green - no obstacle
+        COLOR_RAY_CLOSE = (255, 100, 100)      # Red - obstacle close
+        COLOR_RAY_MED = (255, 200, 100)        # Orange - obstacle medium
+        COLOR_LOOKAHEAD = (100, 100, 255)      # Blue - lookahead points
+        COLOR_LOOKAHEAD_LINE = (150, 150, 255) # Light blue - lookahead lines
+        COLOR_HEADING = (255, 150, 0)          # Orange - heading arrow
+        COLOR_PATH_HEADING = (0, 200, 200)     # Cyan - path heading
+        COLOR_ACTION_GRID_BG = (50, 50, 50)    # Dark gray
+        COLOR_ACTION_SELECTED = (50, 255, 50)  # Green - selected action
+        COLOR_ACTION_CELL = (100, 100, 100)    # Gray - action cells
+        
+        # ===== 1. Draw Obstacle Raycasts =====
+        if self._obs_wrapper is not None:
+            self._obs_wrapper.set_path(path)
+            self._obs_wrapper.set_obstacles(env.obstacles if hasattr(env, 'obstacles') else [])
             
-            discrete_action, _ = self.model.predict(flat_obs, deterministic=True)
-            steering, accel = self.action_map[int(discrete_action)]
+            ray_angles = self._obs_wrapper.ray_angles
+            max_ray_dist = self._obs_wrapper.max_obstacle_distance
             
-            # Add overlay text
-            if hasattr(env, 'overlay_manager'):
-                env.overlay_manager.add_text(
-                    f"DQN Action: steer={np.degrees(steering):.1f}°, accel={accel:.2f}",
-                    position=(10, 10),
-                    color=(50, 200, 50),
+            # Compute ray distances
+            ray_distances = self._obs_wrapper._compute_obstacle_rays(position, heading)
+            
+            for i, ray_angle in enumerate(ray_angles):
+                world_angle = heading + ray_angle
+                ray_dir = np.array([np.cos(world_angle), np.sin(world_angle)])
+                
+                # Actual distance (denormalized)
+                actual_dist = ray_distances[i] * max_ray_dist
+                end_point = position + ray_dir * actual_dist
+                
+                # Color based on distance (normalized value)
+                norm_dist = ray_distances[i]
+                if norm_dist > 0.7:
+                    color = COLOR_RAY_CLEAR
+                elif norm_dist > 0.3:
+                    color = COLOR_RAY_MED
+                else:
+                    color = COLOR_RAY_CLOSE
+                
+                # Draw ray line
+                env.overlay_manager.add_line(
+                    start=tuple(position),
+                    end=tuple(end_point),
+                    color=color,
+                    width=1,
                 )
-        except Exception:
-            pass
+                
+                # Draw hit point if obstacle detected
+                if norm_dist < 1.0:
+                    env.overlay_manager.add_circle(
+                        center=tuple(end_point),
+                        radius=0.3,
+                        color=color,
+                        width=0,
+                    )
+        
+        # ===== 2. Draw Lookahead Points =====
+        if path is not None and len(path) > 1 and self._obs_wrapper is not None:
+            # Find closest path point
+            closest_idx, _ = self._obs_wrapper._find_closest_path_point(position)
+            cumulative_dist = self._obs_wrapper._path_cumulative_dist
+            
+            if cumulative_dist is not None:
+                current_dist = cumulative_dist[closest_idx]
+                
+                for i, lookahead_dist in enumerate(self._obs_wrapper.lookahead_distances):
+                    target_dist = current_dist + lookahead_dist
+                    
+                    # Wrap around for loop tracks
+                    if target_dist >= cumulative_dist[-1]:
+                        target_dist = target_dist % cumulative_dist[-1]
+                    
+                    # Find segment containing target distance
+                    idx = np.searchsorted(cumulative_dist, target_dist) - 1
+                    idx = max(0, min(idx, len(path) - 2))
+                    
+                    # Interpolate position
+                    segment_start_dist = cumulative_dist[idx]
+                    segment_length = cumulative_dist[idx + 1] - segment_start_dist
+                    if segment_length > 0:
+                        t = (target_dist - segment_start_dist) / segment_length
+                    else:
+                        t = 0.0
+                    t = np.clip(t, 0, 1)
+                    
+                    world_point = path[idx] + t * (path[idx + 1] - path[idx])
+                    
+                    # Draw line from vehicle to lookahead point
+                    env.overlay_manager.add_line(
+                        start=tuple(position),
+                        end=tuple(world_point),
+                        color=COLOR_LOOKAHEAD_LINE,
+                        width=1,
+                    )
+                    
+                    # Draw lookahead point
+                    point_size = 0.4 + 0.2 * i  # Larger points for further lookahead
+                    env.overlay_manager.add_circle(
+                        center=tuple(world_point),
+                        radius=point_size,
+                        color=COLOR_LOOKAHEAD,
+                        width=0,
+                    )
+                    
+                    # Label the lookahead distance
+                    env.overlay_manager.add_text(
+                        position=(world_point[0] + 0.5, world_point[1] + 0.5),
+                        text=f"{lookahead_dist:.0f}m",
+                        color=COLOR_LOOKAHEAD,
+                        font_size=12,
+                    )
+        
+        # ===== 3. Draw Heading Error Visualization =====
+        if path is not None and len(path) > 1 and self._obs_wrapper is not None:
+            closest_idx, _ = self._obs_wrapper._find_closest_path_point(position)
+            path_heading = self._obs_wrapper._get_path_heading(closest_idx)
+            
+            arrow_length = 3.0
+            
+            # Draw vehicle heading arrow (orange)
+            vehicle_end = position + arrow_length * np.array([np.cos(heading), np.sin(heading)])
+            env.overlay_manager.add_arrow(
+                start=tuple(position),
+                end=tuple(vehicle_end),
+                color=COLOR_HEADING,
+                width=2,
+                head_size=0.5,
+            )
+            
+            # Draw path heading arrow (cyan)
+            path_end = position + arrow_length * np.array([np.cos(path_heading), np.sin(path_heading)])
+            env.overlay_manager.add_arrow(
+                start=tuple(position),
+                end=tuple(path_end),
+                color=COLOR_PATH_HEADING,
+                width=2,
+                head_size=0.5,
+            )
+        
+        # ===== 4. Draw Action Grid and Current Action =====
+        current_action_idx = None
+        current_steering = 0.0
+        current_accel = 0.0
+        
+        if self.model is not None:
+            try:
+                if self._obs_wrapper is not None:
+                    flat_obs = self._obs_wrapper.observation(observation)
+                else:
+                    flat_obs = self._create_minimal_obs(observation)
+                
+                discrete_action, _ = self.model.predict(flat_obs, deterministic=True)
+                current_action_idx = int(discrete_action)
+                current_steering, current_accel = self.action_map[current_action_idx]
+            except Exception:
+                pass
+        
+        # Draw action grid visualization near vehicle
+        grid_offset_x = 4.0
+        grid_offset_y = 3.0
+        cell_size = 0.8
+        
+        grid_origin = (position[0] + grid_offset_x, position[1] + grid_offset_y)
+        
+        # Draw grid cells
+        for action_idx, (steer, accel) in enumerate(self.action_map):
+            # Calculate grid position
+            steer_idx = action_idx % self.n_steering
+            accel_idx = action_idx // self.n_steering
+            
+            cell_x = grid_origin[0] + steer_idx * cell_size
+            cell_y = grid_origin[1] + accel_idx * cell_size
+            
+            # Determine cell color
+            if action_idx == current_action_idx:
+                color = COLOR_ACTION_SELECTED
+                width = 0  # Filled
+            else:
+                color = COLOR_ACTION_CELL
+                width = 1  # Outline only
+            
+            # Draw cell as small circle
+            env.overlay_manager.add_circle(
+                center=(cell_x + cell_size / 2, cell_y + cell_size / 2),
+                radius=cell_size / 2.5,
+                color=color,
+                width=width,
+            )
+        
+        # Draw grid labels
+        env.overlay_manager.add_text(
+            position=(grid_origin[0] - 0.5, grid_origin[1] + self.n_accel * cell_size + 0.3),
+            text="← Steer →",
+            color=(0, 0, 0),
+            font_size=10,
+        )
+        env.overlay_manager.add_text(
+            position=(grid_origin[0] - 1.5, grid_origin[1] + cell_size),
+            text="Accel",
+            color=(0, 0, 0),
+            font_size=10,
+        )
+        
+        # ===== 5. Draw Status Text =====
+        # Action info
+        env.overlay_manager.add_text(
+            position=(position[0] + 2, position[1] + 6),
+            text=f"DQN: steer={np.degrees(current_steering):.1f}° accel={current_accel:.2f}",
+            color=(50, 150, 50),
+            font_size=14,
+        )
+        
+        # Velocity
+        env.overlay_manager.add_text(
+            position=(position[0] + 2, position[1] + 7.5),
+            text=f"Velocity: {velocity:.1f} m/s ({velocity * 3.6:.1f} km/h)",
+            color=(0, 0, 0),
+            font_size=14,
+        )
+        
+        # Lane centering info
+        dist_lane_center = observation["distance_to_lane_center"][0]
+        on_road = observation["on_road"]
+        road_status = "ON ROAD" if on_road else "OFF ROAD"
+        road_color = (0, 150, 0) if on_road else (200, 0, 0)
+        
+        env.overlay_manager.add_text(
+            position=(position[0] + 2, position[1] + 9),
+            text=f"{road_status} | Lane offset: {dist_lane_center:.2f}m",
+            color=road_color,
+            font_size=14,
+        )
+        
+        # Heading error
+        if path is not None and len(path) > 1 and self._obs_wrapper is not None:
+            closest_idx, _ = self._obs_wrapper._find_closest_path_point(position)
+            path_heading = self._obs_wrapper._get_path_heading(closest_idx)
+            heading_error = heading - path_heading
+            heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+            
+            env.overlay_manager.add_text(
+                position=(position[0] + 2, position[1] + 10.5),
+                text=f"Heading error: {np.degrees(heading_error):.1f}°",
+                color=(100, 100, 100),
+                font_size=14,
+            )

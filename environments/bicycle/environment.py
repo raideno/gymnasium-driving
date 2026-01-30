@@ -99,11 +99,11 @@ class BicycleCarEnv(gymnasium.Env):
             scale_y = (screen_size[1] - 40) / self.world_size[1]
             self.pixels_per_meter = min(scale_x, scale_y)
 
-        # Action space: [steering_angle, acceleration, brake, handbrake]
-        # steering_angle: -max_steering to max_steering
-        # acceleration: 0 to max_acceleration (0 = no acceleration, 1 = max acceleration)
-        # brake: 0 to 1 (0 = no braking, 1 = max brake)
-        # handbrake: 0 to 1 (0 = no handbrake, 1 = max handbrake)
+        # Action space: [steering, throttle, brake, reverse] (CARLA-compatible)
+        # steering: -max_steering to max_steering
+        # throttle: 0 to 1 (0 = no acceleration, 1 = full acceleration)
+        # brake: 0 to 1 (0 = no braking, 1 = full brake)
+        # reverse: 0 or 1 (0 = forward, 1 = reverse)
         self.action_space = gymnasium.spaces.Box(
             low=np.array([-max_steering, 0.0, 0.0, 0.0], dtype=np.float32),
             high=np.array([max_steering, 1.0, 1.0, 1.0], dtype=np.float32),
@@ -375,15 +375,20 @@ class BicycleCarEnv(gymnasium.Env):
         
         steering = np.clip(action[0], -self.max_steering, self.max_steering)
         
-        # acceleration is now in range [0, 1], scale to [-max_acceleration, max_acceleration]
-        # 0.0 = -max_acceleration (full reverse), 0.5 = 0 (no acceleration), 1.0 = max_acceleration (full forward)
-        accel_normalized = action[1] * 2.0 - 1.0  # Convert [0, 1] to [-1, 1]
-        acceleration = accel_normalized * self.max_acceleration
+        # Throttle: 0 = no acceleration, 1 = full acceleration (CARLA-compatible)
+        throttle = np.clip(action[1], 0.0, 1.0)
         
         # Brake: applies deceleration proportional to brake input [0, 1]
         brake = np.clip(action[2], 0.0, 1.0) if len(action) > 2 else 0.0
-        # Handbrake: instantly stops the car when > 0.5
-        handbrake = np.clip(action[3], 0.0, 1.0) if len(action) > 3 else 0.0
+        
+        # Reverse: 0 = forward, non-zero = reverse
+        reverse = (action[3] != 0.0) if len(action) > 3 else False
+        
+        # Apply throttle in the appropriate direction
+        if reverse:
+            acceleration = -throttle * self.max_acceleration
+        else:
+            acceleration = throttle * self.max_acceleration
 
         x, y, theta, v = self.state
 
@@ -391,19 +396,16 @@ class BicycleCarEnv(gymnasium.Env):
         y_new = y + v * np.sin(theta) * self.dt
         theta_new = theta + (v / self.wheelbase) * np.tan(steering) * self.dt
         
-        if handbrake > 0.5:
-            v_new = 0.0
-        else:
-            v_new = v + acceleration * self.dt
-            
-            if brake > 0.0 and abs(v_new) > 0.01:
-                brake_decel = brake * self.max_brake_deceleration * self.dt
-                if v_new > 0:
-                    v_new = max(0.0, v_new - brake_decel)
-                else:
-                    v_new = min(0.0, v_new + brake_decel)
-            
-            v_new = np.clip(v_new, -self.max_velocity, self.max_velocity)
+        v_new = v + acceleration * self.dt
+        
+        if brake > 0.0 and abs(v_new) > 0.01:
+            brake_decel = brake * self.max_brake_deceleration * self.dt
+            if v_new > 0:
+                v_new = max(0.0, v_new - brake_decel)
+            else:
+                v_new = min(0.0, v_new + brake_decel)
+        
+        v_new = np.clip(v_new, -self.max_velocity, self.max_velocity)
 
         theta_new = np.arctan2(np.sin(theta_new), np.cos(theta_new))
 

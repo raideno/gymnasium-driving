@@ -120,13 +120,12 @@ class PurePursuitController:
         acceleration = self.compute_acceleration(velocity)
         
         steering = np.clip(steering, -max_steering, max_steering)
-        acceleration = np.clip(acceleration, -max_acceleration, max_acceleration)
+        acceleration = np.clip(acceleration, 0.0, max_acceleration)
         
-        accel_normalized = acceleration / max_acceleration
-        # NOTE: convert [-1, 1] to [0, 1]
-        accel_action = (accel_normalized + 1.0) / 2.0
+        # Throttle: 0 = no acceleration, 1 = full acceleration (CARLA-compatible)
+        throttle = acceleration / max_acceleration
 
-        return np.array([steering, accel_action, 0.0, 0.0], dtype=np.float32)
+        return np.array([steering, throttle, 0.0, 0.0], dtype=np.float32)
         
     def draw_debug(
         self,

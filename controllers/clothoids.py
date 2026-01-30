@@ -646,13 +646,16 @@ class ClothoidTentaclesController:
         )
         
         steering = np.clip(steering, -max_steering, max_steering)
-        acceleration = np.clip(acceleration, -max_acceleration, max_acceleration)
         
-        # Convert acceleration to [0, 1] range
-        accel_normalized = acceleration / max_acceleration
-        accel_action = (accel_normalized + 1.0) / 2.0  # Convert [-1, 1] to [0, 1]
+        # CARLA-compatible: throttle [0, 1], brake [0, 1], reverse 0/1
+        if acceleration >= 0:
+            throttle = min(acceleration / max_acceleration, 1.0)
+            brake = 0.0
+        else:
+            throttle = 0.0
+            brake = min(-acceleration / max_acceleration, 1.0)
         
-        return np.array([steering, accel_action, 0.0, 0.0], dtype=np.float32)
+        return np.array([steering, throttle, brake, 0.0], dtype=np.float32)
     
     def draw_debug(
         self,
