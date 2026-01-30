@@ -163,6 +163,16 @@ class BicycleCarEnv(gymnasium.Env):
         self.global_path = None  # Will store waypoints as (N, 2) array
         self._compute_global_path()
 
+        # Episode data tracking for metrics
+        self._episode_actions = []
+        self._episode_positions = []
+        self._episode_steering_angles = []
+        self._episode_on_road_flags = []
+        self._episode_velocities = []
+        self._episode_headings = []
+        self._episode_terminated = False
+        self._episode_truncated = False
+
         # Helper classes
         self.overlay_manager = OverlayManager()
         self.performance_tracker = PerformanceTracker(show_performance=True)
@@ -271,8 +281,8 @@ class BicycleCarEnv(gymnasium.Env):
         
         for road in self.road_network.roads:
             for segment in road.segments:
-                # Use more points for smoother paths
-                num_points = max(20, int(segment.get_length() * 2))
+                # Use more points for smoother paths (increased density for better controller performance)
+                num_points = max(256, int(segment.get_length() * 5))
                 centerline = segment.get_centerline_points(num_points)
                 all_centerline_points.extend(centerline)
         
@@ -298,11 +308,12 @@ class BicycleCarEnv(gymnasium.Env):
         
         for point in reordered_path:
             # Only add if not too close to the previous point (avoid duplication)
-            if np.linalg.norm(point - path_points[-1]) > 0.5:
+            # Reduced threshold for denser path
+            if np.linalg.norm(point - path_points[-1]) > 0.2:
                 path_points.append(point)
         
         # Close the loop - return to spawn
-        if np.linalg.norm(self.spawn_pos - path_points[-1]) > 0.5:
+        if np.linalg.norm(self.spawn_pos - path_points[-1]) > 0.2:
             path_points.append(self.spawn_pos.copy())
         
         self.global_path = np.array(path_points, dtype=np.float32)
@@ -332,6 +343,16 @@ class BicycleCarEnv(gymnasium.Env):
         # Reset performance tracking
         self.performance_tracker.reset()
 
+        # Clear episode data tracking
+        self._episode_actions = []
+        self._episode_positions = []
+        self._episode_steering_angles = []
+        self._episode_on_road_flags = []
+        self._episode_velocities = []
+        self._episode_headings = []
+        self._episode_terminated = False
+        self._episode_truncated = False
+
         observation = self._get_observation()
         info = self._get_info()
 
@@ -345,6 +366,13 @@ class BicycleCarEnv(gymnasium.Env):
     ) -> typing.Tuple[
         dict[str, typing.Any], float, bool, bool, dict[str, typing.Any]
     ]:
+        # Store data before step for metrics (capture the state before action is applied)
+        self._episode_positions.append(self.state[:2].copy())
+        self._episode_velocities.append(float(self.state[3]))
+        self._episode_headings.append(float(self.state[2]))
+        self._episode_actions.append(action.copy())
+        self._episode_steering_angles.append(float(action[0]))
+        
         steering = np.clip(action[0], -self.max_steering, self.max_steering)
         
         # acceleration is now in range [0, 1], scale to [-max_acceleration, max_acceleration]
@@ -382,6 +410,7 @@ class BicycleCarEnv(gymnasium.Env):
         self.state = np.array([x_new, y_new, theta_new, v_new], dtype=np.float32)
         
         self.sim_time += self.dt
+        
         for obstacle in self.obstacles:
             obstacle.update(self.sim_time)
         
@@ -389,10 +418,40 @@ class BicycleCarEnv(gymnasium.Env):
 
         observation = self._get_observation()
         info = self._get_info()
+        
+        # TODO: added for tracking
+        # Store on_road flag after state update
+        self._episode_on_road_flags.append(int(observation["on_road"]))
 
         terminated = False
         truncated = False
         reward = 0.0
+        
+        goal_dist = info["goal_distance"]
+        if goal_dist <= self.goal_radius:
+            terminated = True
+            reward = 100.0
+        elif self._check_collision():
+            terminated = True
+            reward = -100.0
+        elif not self._within_world_boundaries():
+            truncated = True
+            reward = -50.0
+        elif self.road_network is not None:
+            if self.road_network.is_off_road(self.state[:2]):
+                if self.enforce_road:
+                    terminated = True
+                    reward = -100.0
+                else:
+                    reward = self.off_road_penalty - 0.01 * goal_dist
+            else:
+                reward = -0.1 - 0.01 * goal_dist
+        # Store episode termination status
+        self._episode_terminated = terminated
+        self._episode_truncated = truncated
+
+        # else:
+        #     reward = -0.1 - 0.01 * goal_dist
 
         if self.render_mode == "human":
             self._render_frame()
@@ -400,7 +459,6 @@ class BicycleCarEnv(gymnasium.Env):
         return observation, reward, terminated, truncated, info
 
     def _get_observation(self) -> dict[str, typing.Any]:
-        """Construct the full observation dictionary."""
         goal_dist = np.linalg.norm(self.state[:2] - self.goal_pos)
 
         on_road = 1
@@ -464,7 +522,6 @@ class BicycleCarEnv(gymnasium.Env):
         }
 
     def _get_info(self) -> dict[str, typing.Any]:
-        """Return auxiliary information."""
         on_road = True
         if self.road_network is not None:
             on_road = not self.road_network.is_off_road(self.state[:2])
@@ -472,7 +529,7 @@ class BicycleCarEnv(gymnasium.Env):
         return {
             "goal_distance": float(np.linalg.norm(self.state[:2] - self.goal_pos)),
             "collision": self._check_collision(),
-            "in_bounds": self._in_bounds(),
+            "in_bounds": self._within_world_boundaries(),
             "on_road": on_road,
         }
 
@@ -481,12 +538,15 @@ class BicycleCarEnv(gymnasium.Env):
         half_length = self.car_length / 2
         half_width = self.car_width / 2
         
-        # Rectangle corners (local frame, car pointing right)
         corners_local = np.array([
-            [half_length, -half_width],   # front-right
-            [half_length, half_width],    # front-left
-            [-half_length, half_width],   # rear-left
-            [-half_length, -half_width],  # rear-right
+            # front-right
+            [half_length, -half_width],
+            # front-left
+            [half_length, half_width],
+            # rear-left
+            [-half_length, half_width],
+            # rear-right
+            [-half_length, -half_width],
         ])
         
         # Rotation matrix
@@ -521,7 +581,6 @@ class BicycleCarEnv(gymnasium.Env):
             if obs.check_collision(center):
                 return True
         
-        # Check road boundary collision if solid borders are enabled
         if self.solid_road_borders and self.road_network is not None:
             # Check if any car point is off-road
             for corner in corners:
@@ -538,8 +597,7 @@ class BicycleCarEnv(gymnasium.Env):
         
         return False
 
-    def _in_bounds(self) -> bool:
-        """Check if car is within world boundaries."""
+    def _within_world_boundaries(self) -> bool:
         x, y = self.state[:2]
         min_x, min_y = self.world_origin
         max_x = min_x + self.world_size[0]
@@ -572,6 +630,32 @@ class BicycleCarEnv(gymnasium.Env):
             overlay_manager=self.overlay_manager,
             performance_tracker=self.performance_tracker,
         )
+        
+    def get_episode_data(self) -> dict[str, typing.Any]:
+        """
+        Get all tracked data from the current/last episode for metrics computation.
+        
+        Returns:
+            Dictionary containing:
+                - 'actions': List of actions taken
+                - 'positions': List of vehicle positions (x, y)
+                - 'steering_angles': List of steering angles (radians)
+                - 'on_road': List of on_road flags (0 or 1)
+                - 'velocities': List of velocities (m/s)
+                - 'headings': List of heading angles (radians)
+                - 'terminated': Whether episode terminated
+                - 'truncated': Whether episode was truncated
+        """
+        return {
+            'actions': self._episode_actions.copy(),
+            'positions': self._episode_positions.copy(),
+            'steering_angles': self._episode_steering_angles.copy(),
+            'on_road': self._episode_on_road_flags.copy(),
+            'velocities': self._episode_velocities.copy(),
+            'headings': self._episode_headings.copy(),
+            'terminated': self._episode_terminated,
+            'truncated': self._episode_truncated,
+        }
 
     def close(self) -> None:
         self.renderer.close()

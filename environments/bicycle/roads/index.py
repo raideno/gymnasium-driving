@@ -35,39 +35,53 @@ HIGHWAY_LANES = LaneConfig(num_lanes=4, lane_width=3.7)
 class RoadSegment(abc.ABC):
     @abc.abstractmethod
     def get_start_pose(self) -> typing.Tuple[np.ndarray, float]:
-        """Return (position, heading) at start of segment."""
+        """
+        Return (position, heading) at start of segment.
+        """
         pass
 
     @abc.abstractmethod
     def get_end_pose(self) -> typing.Tuple[np.ndarray, float]:
-        """Return (position, heading) at end of segment."""
+        """
+        Return (position, heading) at end of segment.
+        """
         pass
 
     @abc.abstractmethod
     def contains_point(self, point: np.ndarray, half_width: float) -> bool:
-        """Check if point is within the road segment bounds."""
+        """
+        Check if point is within the road segment bounds.
+        """
         pass
 
     @abc.abstractmethod
     def get_centerline_points(self, num_points: int) -> np.ndarray:
-        """Get points along the centerline for rendering."""
+        """
+        Get points along the centerline for rendering.
+        """
         pass
 
     @abc.abstractmethod
     def get_boundary_points(
         self, half_width: float, num_points: int
     ) -> typing.Tuple[np.ndarray, np.ndarray]:
-        """Get left and right boundary points for rendering."""
+        """
+        Get left and right boundary points for rendering.
+        """
         pass
 
     @abc.abstractmethod
     def get_length(self) -> float:
-        """Get the length of this segment along the centerline."""
+        """
+        Get the length of this segment along the centerline.
+        """
         pass
 
     @abc.abstractmethod
     def get_bounds(self, half_width: float) -> typing.Tuple[float, float, float, float]:
-        """Get (min_x, min_y, max_x, max_y) bounds of this segment."""
+        """
+        Get (min_x, min_y, max_x, max_y) bounds of this segment.
+        """
         pass
 
     @abc.abstractmethod

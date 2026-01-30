@@ -1,43 +1,10 @@
-"""
-Stanley Controller for Autonomous Vehicle Trajectory Tracking.
-
-Implementation based on the paper:
-"Autonomous Automobile Trajectory Tracking for Off-Road Driving:
-Controller Design, Experimental Validation and Racing"
-- Gabriel M. Hoffmann, Claire J. Tomlin, Michael Montemerlo, Sebastian Thrun
-- Stanford University, DARPA Grand Challenge 2005
-
-The controller was used on "Stanley", the Stanford Racing Team's entry in the
-DARPA Grand Challenge 2005, achieving the fastest completion time and averaging
-19.1 mph on desert and mountainous terrain with typical RMS crosstrack error
-under 0.1 m.
-
-Key Design Principles:
-1. Consider orientation of FRONT WHEELS with respect to trajectory (collocated control)
-2. Crosstrack error measured at the guiding (front) wheels, not vehicle body
-3. Global asymptotic stability proven for kinematic equations of motion (Theorem 1)
-4. Augmented with dynamics compensation for pneumatic tires and steering servo
-
-Key Equations from the paper:
-- Kinematic control law (Eq. 5): δ = ψ + arctan(k * e / v)
-- Complete steering law (Eq. 9): δ = (ψ - ψ_ss) + arctan(k * e / (k_soft + v)) 
-                                    + k_d,yaw * (r_meas - r_traj) 
-                                    + k_d,steer * (δ_meas(i) - δ_meas(i+1))
-- Steady state yaw (Eq. 8): ψ_ss = k_ag * v * r_traj = m * v * r / (C_y * (1 + a/b))
-- Crosstrack error dynamics (Eq. 1): ė = v * sin(ψ - δ)
-- Yaw rate (Eq. 2): ψ̇ = -v * sin(δ) / (a + b)
-"""
-
 import typing
 import dataclasses
 
 import numpy as np
 
-
 @dataclasses.dataclass
 class StanleyDebugInfo:
-    """Debug information for visualization."""
-    
     # Front wheel position (where crosstrack is measured)
     front_wheel_position: np.ndarray
     
@@ -74,39 +41,6 @@ class StanleyDebugInfo:
 
 
 class StanleyController:
-    """
-    Stanley Controller for path following.
-    
-    This implements the complete control law from the Stanford Racing Team paper:
-    
-    Kinematic Control Law (Equation 5):
-        δ(t) = ψ(t) + arctan(k * e(t) / v(t))
-        
-    where:
-        - δ(t): steering angle command
-        - ψ(t): vehicle heading relative to closest path segment (heading error)
-        - e(t): crosstrack error at front wheels (positive = left of path)
-        - v(t): vehicle forward velocity
-        - k: crosstrack gain (controls convergence rate)
-        
-    The control law has proven global asymptotic stability (Theorem 1 in paper).
-    
-    Complete Steering Law with Dynamics (Equation 9):
-        δ(t) = (ψ - ψ_ss) + arctan(k * e / (k_soft + v)) 
-               + k_d,yaw * (r_meas - r_traj) 
-               + k_d,steer * (δ_meas(i) - δ_meas(i+1))
-               
-    where:
-        - ψ_ss: steady-state yaw for curves (from Eq. 8)
-        - k_soft: prevents oversensitivity at low speeds
-        - k_d,yaw: yaw rate damping gain
-        - r_traj: desired yaw rate from trajectory
-        - k_d,steer: steering servo damping gain
-        
-    The controller uses crosstrack error at the FRONT WHEELS (not vehicle center),
-    enabling collocated control of the system.
-    """
-    
     def __init__(
         self,
         # Core gains from paper

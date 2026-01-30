@@ -4,8 +4,6 @@ class PurePursuitController:
     def __init__(
         self,
         lookahead_distance: float = 5.0,
-        min_lookahead: float = 2.0,
-        max_lookahead: float = 15.0,
         wheelbase: float = 2.5,
         target_velocity: float = 5.0,
         kp_velocity: float = 1.0,

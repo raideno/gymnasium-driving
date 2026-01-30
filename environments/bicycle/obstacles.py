@@ -1,61 +1,27 @@
-# obstacles.py
-
 import abc
 import typing
 import dataclasses
 
 import numpy as np
 
-# Type alias for motion functions: takes (time, initial_center) -> new_center
 MotionFn = typing.Callable[[float, typing.Tuple[float, float]], typing.Tuple[float, float]]
 
-
-# =============================================================================
-# Predefined Motion Functions
-# =============================================================================
-
 def static() -> MotionFn:
-    """No motion - obstacle stays at initial position."""
     return lambda t, init: init
 
-
 def circular(radius: float, angular_speed: float, center: typing.Tuple[float, float] = None) -> MotionFn:
-    """
-    Circular motion around a center point.
-    
-    Args:
-        radius: Radius of the circular path in meters
-        angular_speed: Angular velocity in radians per second (positive = CCW)
-        center: Center of rotation. If None, rotates around initial position offset by radius.
-    """
     def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
         cx, cy = center if center is not None else (init[0], init[1] - radius)
         angle = angular_speed * t
         return (cx + radius * np.cos(angle), cy + radius * np.sin(angle))
     return motion
 
-
 def linear(velocity: typing.Tuple[float, float]) -> MotionFn:
-    """
-    Linear motion with constant velocity.
-    
-    Args:
-        velocity: (vx, vy) velocity in meters per second
-    """
     def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
         return (init[0] + velocity[0] * t, init[1] + velocity[1] * t)
     return motion
 
-
 def oscillate(axis: str, amplitude: float, frequency: float) -> MotionFn:
-    """
-    Sinusoidal oscillation along one axis.
-    
-    Args:
-        axis: 'x' or 'y' - which axis to oscillate along
-        amplitude: Maximum displacement in meters
-        frequency: Oscillation frequency in Hz
-    """
     def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
         offset = amplitude * np.sin(2 * np.pi * frequency * t)
         if axis == 'x':
@@ -64,15 +30,7 @@ def oscillate(axis: str, amplitude: float, frequency: float) -> MotionFn:
             return (init[0], init[1] + offset)
     return motion
 
-
 def figure_eight(size: float, speed: float) -> MotionFn:
-    """
-    Figure-8 (lemniscate) motion pattern.
-    
-    Args:
-        size: Scale of the figure-8 in meters
-        speed: Speed of traversal (radians per second)
-    """
     def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
         angle = speed * t
         x = size * np.sin(angle)
@@ -80,20 +38,11 @@ def figure_eight(size: float, speed: float) -> MotionFn:
         return (init[0] + x, init[1] + y)
     return motion
 
-
 def waypoints(
     points: typing.List[typing.Tuple[float, float]], 
     speed: float, 
     loop: bool = True
 ) -> MotionFn:
-    """
-    Move between waypoints at constant speed.
-    
-    Args:
-        points: List of (x, y) waypoints (absolute positions, not relative to init)
-        speed: Movement speed in meters per second
-        loop: Whether to loop back to the first waypoint
-    """
     def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
         if len(points) == 0:
             return init
@@ -134,24 +83,20 @@ def waypoints(
         return points[-1] if not loop else points[0]
     return motion
 
-
 @dataclasses.dataclass
 class Obstacle(abc.ABC):
     center: typing.Tuple[float, float]
     motion: MotionFn = dataclasses.field(default_factory=static)
     
     def __post_init__(self):
-        # Store initial center for motion calculations
         self._initial_center = self.center
         self._current_time = 0.0
 
     def update(self, time: float) -> None:
-        """Update obstacle position based on time and motion function."""
         self._current_time = time
         self.center = self.motion(time, self._initial_center)
     
     def reset(self) -> None:
-        """Reset obstacle to initial position."""
         self._current_time = 0.0
         self.center = self._initial_center
 
@@ -165,9 +110,6 @@ class Obstacle(abc.ABC):
 
     @abc.abstractmethod
     def get_bounds(self) -> typing.Tuple[float, float, float, float]:
-        """
-        Return (min_x, min_y, max_x, max_y) bounds.
-        """
         pass
 
 
@@ -190,7 +132,6 @@ class Circle(Obstacle):
             self.center[0] + self.radius,
             self.center[1] + self.radius,
         )
-
 
 @dataclasses.dataclass
 class Rectangle(Obstacle):

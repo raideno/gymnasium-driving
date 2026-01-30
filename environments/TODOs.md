@@ -12,3 +12,8 @@
 - [x] Add real timing, fps and a controllable speed up of time.
 - [x] Add collision with road sides. Enabled overall and controllable on road network on creation on each individual segment.
 - [ ] Add "Distance" to lane center into the observation data.
+
+- [ ] Ask what is the speed used for the car for test drives.
+- [ ] Understand and simplify the clothoid based controller.
+- [ ] Make the clothoid based controller with other types of functions such as polynoms, etc.
+- [ ] Make the environment more realistic by returning predictions in the observation state, like possibility to add a model that'll take the observation and return a prediction.

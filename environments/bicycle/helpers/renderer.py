@@ -262,7 +262,7 @@ class Renderer:
         is_loop = True  # Assume loop by default
         pygame.draw.lines(self.screen, (150, 100, 200), is_loop, path_screen, 2)
         # Draw waypoints as small circles (only every few points for cleaner look)
-        step = max(1, len(path_screen) // 30)  # Show ~30 waypoint markers max
+        step = max(1, len(path_screen) // 128)  # Show ~30 waypoint markers max
         for i in range(0, len(path_screen), step):
             point = path_screen[i]
             # Color start point green, others purple
