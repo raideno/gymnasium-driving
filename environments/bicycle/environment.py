@@ -21,6 +21,7 @@ class BicycleCarEnv(gymnasium.Env):
     DEFAULT_CAR_LENGTH = 4.5
     DEFAULT_CAR_WIDTH = 1.8
 
+    # TODO: can't we have everything be auto assigned ?
     def __init__(
         self,
         render_mode: str | None = None,
@@ -88,17 +89,15 @@ class BicycleCarEnv(gymnasium.Env):
         self.screen_size = screen_size
         self.render_mode = render_mode
 
-        # Calculate scale (pixels per meter)
         if pixels_per_meter is not None:
             self.pixels_per_meter = pixels_per_meter
         else:
-            # Fit world to screen with some margin
-            # TODO: move margins into parameters
-            scale_x = (screen_size[0] - 40) / self.world_size[0]
-            scale_y = (screen_size[1] - 40) / self.world_size[1]
+            margin_x, margin_y = 40, 40
+            scale_x = (screen_size[0] - margin_x) / self.world_size[0]
+            scale_y = (screen_size[1] - margin_y) / self.world_size[1]
             self.pixels_per_meter = min(scale_x, scale_y)
 
-        # steering, throttle, brake, reverse
+        # [steering, throttle, brake, reverse]
         self.action_space = gymnasium.spaces.Box(
             low=np.array([-max_steering, 0.0, 0.0, 0.0], dtype=np.float32),
             high=np.array([max_steering, 1.0, 1.0, 1.0], dtype=np.float32),
@@ -116,37 +115,6 @@ class BicycleCarEnv(gymnasium.Env):
                 "velocity": gymnasium.spaces.Box(
                     -max_velocity, max_velocity, shape=(1,), dtype=np.float32
                 ),
-                "goal": gymnasium.spaces.Box(
-                    -np.inf, np.inf, shape=(2,), dtype=np.float32
-                ),
-                "goal_distance": gymnasium.spaces.Box(
-                    0, np.inf, shape=(1,), dtype=np.float32
-                ),
-                "on_road": gymnasium.spaces.Discrete(2),
-                "distance_to_road_center": gymnasium.spaces.Box(
-                    0, np.inf, shape=(1,), dtype=np.float32
-                ),
-                "distance_to_left_boundary": gymnasium.spaces.Box(
-                    0, np.inf, shape=(1,), dtype=np.float32
-                ),
-                "distance_to_right_boundary": gymnasium.spaces.Box(
-                    0, np.inf, shape=(1,), dtype=np.float32
-                ),
-                "lane_number": gymnasium.spaces.Discrete(10),
-                "num_lanes": gymnasium.spaces.Discrete(10),
-                "lane_width": gymnasium.spaces.Box(
-                    0, np.inf, shape=(1,), dtype=np.float32
-                ),
-                "road_width": gymnasium.spaces.Box(
-                    0, np.inf, shape=(1,), dtype=np.float32
-                ),
-                "distance_to_lane_center": gymnasium.spaces.Box(
-                    -np.inf, np.inf, shape=(1,), dtype=np.float32
-                ),
-                "intersecting_left_boundary": gymnasium.spaces.Discrete(2),
-                "intersecting_right_boundary": gymnasium.spaces.Discrete(2),
-                "in_single_lane": gymnasium.spaces.Discrete(2),
-                "in_multiple_lanes": gymnasium.spaces.Discrete(2),
             }
         )
 
@@ -159,7 +127,6 @@ class BicycleCarEnv(gymnasium.Env):
             'actions': [],
             'positions': [],
             'steering_angles': [],
-            'on_road': [],
             'velocities': [],
             'headings': [],
             'terminated': False,
@@ -174,15 +141,17 @@ class BicycleCarEnv(gymnasium.Env):
             render_fps=self.metadata["render_fps"],
         )
 
-    def _calculate_world_bounds(
-        self, explicit_world_size: typing.Tuple[float, float] | None
-    ) -> typing.Tuple[np.ndarray, np.ndarray]:
+    def _calculate_world_bounds(self, explicit_world_size: typing.Tuple[float, float] | None) -> typing.Tuple[np.ndarray, np.ndarray]:
         """
         Calculate world bounds based on all content.
 
         Returns:
-            world_size: (width, height) in meters
-            world_origin: (min_x, min_y) - bottom-left corner in world coords
+            world_size:
+                (width, height) in meters
+            world_origin:
+                (min_x, min_y)
+                Bottom left corner of the rectangular area of the world that will be displayed on screen.
+                Everything outside that rectangle gets clipped (not rendered).
         """
         if explicit_world_size is not None:
             return (
@@ -190,69 +159,59 @@ class BicycleCarEnv(gymnasium.Env):
                 np.array([0.0, 0.0], dtype=np.float32),
             )
 
-        # Collect all bounds
         min_x, min_y = float("inf"), float("inf")
         max_x, max_y = float("-inf"), float("-inf")
+        
+        # spawn position
+        min_x, min_y = min(min_x, self.spawn_pos[0]), min(min_y, self.spawn_pos[1])
+        max_x, max_y = max(max_x, self.spawn_pos[0]), max(max_y, self.spawn_pos[1])
 
-        # Include spawn position
-        min_x = min(min_x, self.spawn_pos[0])
-        min_y = min(min_y, self.spawn_pos[1])
-        max_x = max(max_x, self.spawn_pos[0])
-        max_y = max(max_y, self.spawn_pos[1])
+        # goal position
+        min_x, min_y = min(min_x, self.goal_pos[0] - self.goal_radius), min(min_y, self.goal_pos[1] - self.goal_radius)
+        max_x, max_y = max(max_x, self.goal_pos[0] + self.goal_radius), max(max_y, self.goal_pos[1] + self.goal_radius)
 
-        # Include goal position
-        min_x = min(min_x, self.goal_pos[0] - self.goal_radius)
-        min_y = min(min_y, self.goal_pos[1] - self.goal_radius)
-        max_x = max(max_x, self.goal_pos[0] + self.goal_radius)
-        max_y = max(max_y, self.goal_pos[1] + self.goal_radius)
+        # obstacles
+        for obstacle in self.obstacles:
+            bounds = obstacle.get_bounds()
+            
+            min_x, min_y = min(min_x, bounds[0]), min(min_y, bounds[1])
+            max_x, max_y = max(max_x, bounds[2]), max(max_y, bounds[3])
 
-        # Include obstacles
-        for obs in self.obstacles:
-            bounds = obs.get_bounds()
-            min_x = min(min_x, bounds[0])
-            min_y = min(min_y, bounds[1])
-            max_x = max(max_x, bounds[2])
-            max_y = max(max_y, bounds[3])
-
-        # Include roads
+        # roads
         if self.road_network is not None:
             bounds = self.road_network.get_bounds()
-            min_x = min(min_x, bounds[0])
-            min_y = min(min_y, bounds[1])
-            max_x = max(max_x, bounds[2])
-            max_y = max(max_y, bounds[3])
+            min_x, min_y = min(min_x, bounds[0]), min(min_y, bounds[1])
+            max_x, max_y = max(max_x, bounds[2]), max(max_y, bounds[3])
 
-        # Apply padding
-        min_x -= self.world_padding
-        min_y -= self.world_padding
-        max_x += self.world_padding
-        max_y += self.world_padding
+        # padding
+        min_x, min_y = min_x - self.world_padding, min_y - self.world_padding
+        max_x, max_y = max_x + self.world_padding, max_y + self.world_padding
 
         world_size = np.array([max_x - min_x, max_y - min_y], dtype=np.float32)
         world_origin = np.array([min_x, min_y], dtype=np.float32)
 
         return world_size, world_origin
 
-    def _world_to_screen(
-        self, pos: typing.Union[np.ndarray, typing.Tuple[float, float]]
-    ) -> typing.Tuple[int, int]:
-        """Convert world coordinates (meters) to screen coordinates (pixels)."""
-        if isinstance(pos, tuple):
-            pos = np.array(pos, dtype=np.float32)
+    def _world_to_screen(self, position: typing.Union[np.ndarray, typing.Tuple[float, float]]) -> typing.Tuple[int, int]:
+        """
+        Convert world coordinates (meters) to screen coordinates (pixels).
+        Position P (100, 100) in the world isn't (100, 100) in the screen.
+        The screen maps an area of the world determined by world_origin. If it is (90, 90).
+        To get position of P in screen, we do `local_position = (100, 100) - (90, 90) = (10, 10).
+        """
+        if isinstance(position, tuple):
+            position = np.array(position, dtype=np.float32)
 
-        # Translate to local coordinates
-        local_pos = pos - self.world_origin
+        local_position = position - self.world_origin
 
-        # Scale to pixels
-        screen_x = int(local_pos[0] * self.pixels_per_meter) + 20
+        screen_x = int(local_position[0] * self.pixels_per_meter) + 20
         screen_y = int(
-            self.screen_size[1] - local_pos[1] * self.pixels_per_meter - 20
+            self.screen_size[1] - local_position[1] * self.pixels_per_meter - 20
         )
 
         return (screen_x, screen_y)
 
     def _meters_to_pixels(self, meters: float) -> int:
-        """Convert a distance in meters to pixels."""
         return max(1, int(meters * self.pixels_per_meter))
 
     def _compute_global_path(self) -> None:
@@ -311,11 +270,7 @@ class BicycleCarEnv(gymnasium.Env):
         self.global_path = np.array(path_points, dtype=np.float32)
         self.global_path_is_loop = True  # Flag to indicate this is a closed loop
 
-    def reset(
-        self,
-        seed: int | None = None,
-        options: dict[str, typing.Any] | None = None,
-    ) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
+    def reset(self, seed: int | None = None) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         super().reset(seed=seed)
 
         self.state = np.array(
@@ -328,25 +283,22 @@ class BicycleCarEnv(gymnasium.Env):
             dtype=np.float32,
         )
         
-        self.sim_time = 0.0
+        self.simulation_time = 0.0
         for obstacle in self.obstacles:
             obstacle.reset()
         
-        # Reset performance tracking
         self.performance_tracker.reset()
 
-        # Clear episode data tracking
         self._episode_data['actions'] = []
         self._episode_data['positions'] = []
         self._episode_data['steering_angles'] = []
-        self._episode_data['on_road'] = []
         self._episode_data['velocities'] = []
         self._episode_data['headings'] = []
         self._episode_data['terminated'] = False
         self._episode_data['truncated'] = False
 
         observation = self._get_observation()
-        info = self._get_info()
+        info = None
 
         if self.render_mode == "human":
             self._render_frame()
@@ -354,11 +306,13 @@ class BicycleCarEnv(gymnasium.Env):
         return observation, info
 
     def step(
-        self, action: np.ndarray
+        self,
+        action: np.ndarray
     ) -> typing.Tuple[
         dict[str, typing.Any], float, bool, bool, dict[str, typing.Any]
     ]:
-        # Store data before step for metrics (capture the state before action is applied)
+        assert len(action) == 4, "Action must be of the form [steering, throttle, brake, reverse]"
+        
         self._episode_data['positions'].append(self.state[:2].copy())
         self._episode_data['velocities'].append(float(self.state[3]))
         self._episode_data['headings'].append(float(self.state[2]))
@@ -366,28 +320,18 @@ class BicycleCarEnv(gymnasium.Env):
         self._episode_data['steering_angles'].append(float(action[0]))
         
         steering = np.clip(action[0], -self.max_steering, self.max_steering)
-        
-        # Throttle: 0 = no acceleration, 1 = full acceleration (CARLA-compatible)
         throttle = np.clip(action[1], 0.0, 1.0)
+        brake = np.clip(action[2], 0.0, 1.0)
+        reverse = (action[3] != 0.0)
         
-        # Brake: applies deceleration proportional to brake input [0, 1]
-        brake = np.clip(action[2], 0.0, 1.0) if len(action) > 2 else 0.0
-        
-        # Reverse: 0 = forward, non-zero = reverse
-        reverse = (action[3] != 0.0) if len(action) > 3 else False
-        
-        # Apply throttle in the appropriate direction
-        if reverse:
-            acceleration = -throttle * self.max_acceleration
-        else:
-            acceleration = throttle * self.max_acceleration
+        direction = -1 if reverse else 1
+        acceleration = direction * throttle * self.max_acceleration
 
         x, y, theta, v = self.state
 
         x_new = x + v * np.cos(theta) * self.dt
         y_new = y + v * np.sin(theta) * self.dt
         theta_new = theta + (v / self.wheelbase) * np.tan(steering) * self.dt
-        
         v_new = v + acceleration * self.dt
         
         if brake > 0.0 and abs(v_new) > 0.01:
@@ -403,26 +347,22 @@ class BicycleCarEnv(gymnasium.Env):
 
         self.state = np.array([x_new, y_new, theta_new, v_new], dtype=np.float32)
         
-        self.sim_time += self.dt
+        self.simulation_time += self.dt
         
         for obstacle in self.obstacles:
-            obstacle.update(self.sim_time)
+            obstacle.update(self.simulation_time)
         
         self.performance_tracker.update()
 
         observation = self._get_observation()
-        info = self._get_info()
+        info = None
         
-        # TODO: added for tracking
-        # Store on_road flag after state update
-        self._episode_data['on_road'].append(int(observation["on_road"]))
-        # self._episode_on_road_flags.append(int(observation["on_road"]))
-
         terminated = False
         truncated = False
         reward = 0.0
         
-        goal_dist = info["goal_distance"]
+        # TODO: rather than self.state[:2] access it in a more comprehensible way.
+        goal_dist = np.linalg.norm(self.state[:2] - self.goal_pos)
         if goal_dist <= self.goal_radius:
             terminated = True
             reward = 100.0
@@ -441,14 +381,9 @@ class BicycleCarEnv(gymnasium.Env):
                     reward = self.off_road_penalty - 0.01 * goal_dist
             else:
                 reward = -0.1 - 0.01 * goal_dist
-        # Store episode termination status
+        
         self._episode_data['terminated'] = terminated
         self._episode_data['truncated'] = truncated
-        # self._episode_terminated = terminated
-        # self._episode_truncated = truncated
-
-        # else:
-        #     reward = -0.1 - 0.01 * goal_dist
 
         if self.render_mode == "human":
             self._render_frame()
@@ -456,80 +391,12 @@ class BicycleCarEnv(gymnasium.Env):
         return observation, reward, terminated, truncated, info
 
     def _get_observation(self) -> dict[str, typing.Any]:
-        goal_dist = np.linalg.norm(self.state[:2] - self.goal_pos)
-
-        on_road = 1
-        road_info = {
-            "distance_to_road_center": 0.0,
-            "distance_to_left_boundary": 0.0,
-            "distance_to_right_boundary": 0.0,
-            "lane_number": 0,
-            "num_lanes": 1,
-            "lane_width": 3.5,
-            "road_width": 3.5,
-            "distance_to_lane_center": 0.0,
-            "intersecting_left_boundary": False,
-            "intersecting_right_boundary": False,
-            "in_single_lane": True,
-            "in_multiple_lanes": False,
-        }
-
-        if self.road_network is not None:
-            comprehensive_info = self.road_network.get_comprehensive_road_info(
-                self.state[:2], self.state[2]
-            )
-            on_road = 1 if comprehensive_info["on_road"] else 0
-            road_info.update(comprehensive_info)
-
         return {
             "position": self.state[:2].copy(),
             "heading": np.array([self.state[2]], dtype=np.float32),
             "velocity": np.array([self.state[3]], dtype=np.float32),
-            "goal": self.goal_pos.copy(),
-            "goal_distance": np.array([goal_dist], dtype=np.float32),
-            "on_road": on_road,
-            "distance_to_road_center": np.array(
-                [road_info["distance_to_road_center"]], dtype=np.float32
-            ),
-            "distance_to_left_boundary": np.array(
-                [road_info["distance_to_left_boundary"]], dtype=np.float32
-            ),
-            "distance_to_right_boundary": np.array(
-                [road_info["distance_to_right_boundary"]], dtype=np.float32
-            ),
-            "lane_number": int(road_info["lane_number"]) + 1,
-            "num_lanes": int(road_info["num_lanes"]),
-            "lane_width": np.array(
-                [road_info["lane_width"]], dtype=np.float32
-            ),
-            "road_width": np.array(
-                [road_info["road_width"]], dtype=np.float32
-            ),
-            "distance_to_lane_center": np.array(
-                [road_info["distance_to_lane_center"]], dtype=np.float32
-            ),
-            "intersecting_left_boundary": int(
-                road_info["intersecting_left_boundary"]
-            ),
-            "intersecting_right_boundary": int(
-                road_info["intersecting_right_boundary"]
-            ),
-            "in_single_lane": int(road_info["in_single_lane"]),
-            "in_multiple_lanes": int(road_info["in_multiple_lanes"]),
         }
-
-    def _get_info(self) -> dict[str, typing.Any]:
-        on_road = True
-        if self.road_network is not None:
-            on_road = not self.road_network.is_off_road(self.state[:2])
-
-        return {
-            "goal_distance": float(np.linalg.norm(self.state[:2] - self.goal_pos)),
-            "collision": self._check_collision(),
-            "in_bounds": self._within_world_boundaries(),
-            "on_road": on_road,
-        }
-
+        
     def _get_car_corners(self) -> np.ndarray:
         x, y, theta, _ = self.state
         half_length = self.car_length / 2
@@ -546,59 +413,60 @@ class BicycleCarEnv(gymnasium.Env):
             [-half_length, -half_width],
         ])
         
-        # Rotation matrix
         c, s = np.cos(theta), np.sin(theta)
         rot = np.array([[c, -s], [s, c]])
         
-        # Transform to world frame
-        pos = np.array([x, y])
-        corners_world = np.array([pos + rot @ corner for corner in corners_local])
+        position = np.array([x, y])
+        corners_world = np.array([position + rot @ corner for corner in corners_local])
         
         return corners_world
     
     def _check_collision(self) -> bool:
         corners = self._get_car_corners()
         
-        # Check corners against obstacles
+        # corners vs obstacles
         for corner in corners:
             for obs in self.obstacles:
                 if obs.check_collision(corner):
                     return True
         
-        # Check midpoints of each edge for better collision detection
+        # edges' midpoints vs obstacles
         for i in range(4):
             midpoint = (corners[i] + corners[(i + 1) % 4]) / 2
             for obs in self.obstacles:
                 if obs.check_collision(midpoint):
                     return True
         
-        # Check center point
+        # center point vs obstacles
         center = self.state[:2]
         for obs in self.obstacles:
             if obs.check_collision(center):
                 return True
         
         if self.solid_road_borders and self.road_network is not None:
-            # Check if any car point is off-road
+            # corners vs off-road
             for corner in corners:
                 if self.road_network.is_off_road(corner):
                     return True
-            # Check midpoints
+            # edges' midpoints vs off-road
             for i in range(4):
                 midpoint = (corners[i] + corners[(i + 1) % 4]) / 2
                 if self.road_network.is_off_road(midpoint):
                     return True
-            # Check center
+            # center point vs off-road
             if self.road_network.is_off_road(center):
                 return True
         
         return False
 
     def _within_world_boundaries(self) -> bool:
+        """
+        Checks whether the vehicle is withing the rectangular area defined by `world_origin`
+        and `world_size`. This area includes everything that could be rendered (spawn, goal, obstacles, etc).
+        """
         x, y = self.state[:2]
         min_x, min_y = self.world_origin
-        max_x = min_x + self.world_size[0]
-        max_y = min_y + self.world_size[1]
+        max_x, max_y = min_x + self.world_size[0], min_y + self.world_size[1]
         return min_x <= x <= max_x and min_y <= y <= max_y
 
     def render(self) -> np.ndarray | None:
@@ -623,26 +491,12 @@ class BicycleCarEnv(gymnasium.Env):
             world_to_screen=self._world_to_screen,
             meters_to_pixels=self._meters_to_pixels,
             get_car_corners=self._get_car_corners,
-            sim_time=self.sim_time,
+            sim_time=self.simulation_time,
             overlay_manager=self.overlay_manager,
             performance_tracker=self.performance_tracker,
         )
         
     def get_episode_data(self) -> dict[str, typing.Any]:
-        """
-        Get all tracked data from the current/last episode for metrics computation.
-        
-        Returns:
-            Dictionary containing:
-                - 'actions': List of actions taken
-                - 'positions': List of vehicle positions (x, y)
-                - 'steering_angles': List of steering angles (radians)
-                - 'on_road': List of on_road flags (0 or 1)
-                - 'velocities': List of velocities (m/s)
-                - 'headings': List of heading angles (radians)
-                - 'terminated': Whether episode terminated
-                - 'truncated': Whether episode was truncated
-        """
         return {
             **self._episode_data,
         }
