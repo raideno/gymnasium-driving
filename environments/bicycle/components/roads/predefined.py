@@ -184,6 +184,78 @@ def create_rectangular_track(
 
     return builder.build()
 
+def create_rectangular_track_with_cross(
+    center: typing.Tuple[float, float],
+    length: float,
+    width: float,
+    turn_radius: float,
+    cross_width: float = 3.5,
+    lane_config: LaneConfig = DOUBLE_LANE,
+) -> RoadNetwork:
+    """
+    Create a rectangular track with a cross road dividing it in the middle.
+
+    The outer rectangle forms the main track, and a cross-shaped road
+    runs horizontally and vertically through the center, creating an
+    intersection pattern.
+
+    Args:
+        center: Center of the rectangle (x, y) in meters
+        length: Length of the long sides (horizontal) in meters
+        width: Length of the short sides (vertical) in meters
+        turn_radius: Radius of the corner turns in meters
+        cross_width: Width of the cross roads in meters (for lane config)
+        lane_config: Lane configuration for the main track
+        
+    Returns:
+        A RoadNetwork containing the main track and the cross road
+    """
+    # Create main rectangular track
+    main_track = create_rectangular_track(
+        center=center,
+        length=length,
+        width=width,
+        turn_radius=turn_radius,
+        lane_config=lane_config,
+    )
+
+    # Create cross road lane config (narrower roads for crossing)
+    cross_lane_config = lane_config_from_width(cross_width, num_lanes=1)
+
+    half_length = length / 2
+    half_width = width / 2
+    cx, cy = center
+
+    # Horizontal cross road (running left-right through center)
+    horizontal_road = (
+        RoadBuilder(
+            (cx - half_length, cy),  # Start from left edge at center height
+            0.0,  # Pointing right
+            cross_lane_config,
+        )
+        .straight(length)
+        .build()
+    )
+
+    # Vertical cross road (running top-bottom through center)
+    vertical_road = (
+        RoadBuilder(
+            (cx, cy - half_width),  # Start from bottom edge at center width
+            np.pi / 2,  # Pointing up
+            cross_lane_config,
+        )
+        .straight(width)
+        .build()
+    )
+
+    # Create network with all roads
+    network = RoadNetwork()
+    network.add_road(main_track)
+    network.add_road(horizontal_road)
+    network.add_road(vertical_road)
+
+    return network
+
 
 def create_square_track(
     center: typing.Tuple[float, float],

@@ -33,17 +33,13 @@ class BicycleCarEnv(gymnasium.Env):
     
     SCREEN_SIZE = (800, 800)
     
-    # TODO: can't we have everything be auto assigned ?
     def __init__(
         self,
-        render_mode: str | None = None,
-        
-        # Environment parameters (all in meters)
-        world_size: typing.Tuple[float, float] | None = None,  # Auto-calculated
+        render_mode: typing.Literal["human", "rgb_array"] | None = None,
         # (position (x, y), heading in radians)
         spawn: typing.Tuple[typing.Tuple[float, float], float] = ((10.0, 10.0), 0.0),
-        
-        goal: typing.Tuple[typing.Tuple[float, float], float] | None = ((90.0, 90.0), 3.0),
+        # (position (x, y), radius in meters)
+        goal: typing.Tuple[typing.Tuple[float, float], float] = ((90.0, 90.0), 3.0),
         obstacles: typing.List[typing.Union[Circle, Rectangle]] | None = None,
         road_network: RoadNetwork | None = None,
         # TODO: enforce road should be encoded in the road network itself not here
@@ -66,10 +62,8 @@ class BicycleCarEnv(gymnasium.Env):
         self.enforce_road = enforce_road
         self.solid_road_borders = solid_road_borders
 
-        self.world_size, self.world_origin = self._calculate_world_bounds(
-            world_size
-        )
-
+        self.world_size, self.world_origin = self._calculate_world_bounds()
+        self.world_size = np.array((100, 100))
         self.render_mode = render_mode
 
         margin_x, margin_y = 40, 40
@@ -120,8 +114,10 @@ class BicycleCarEnv(gymnasium.Env):
             render_mode=render_mode,
             render_fps=self.metadata["render_fps"],
         )
+        
+        self.simulation_time = 0.0
 
-    def _calculate_world_bounds(self, explicit_world_size: typing.Tuple[float, float] | None) -> typing.Tuple[np.ndarray, np.ndarray]:
+    def _calculate_world_bounds(self) -> typing.Tuple[np.ndarray, np.ndarray]:
         """
         Calculate world bounds based on all content.
 
@@ -133,12 +129,6 @@ class BicycleCarEnv(gymnasium.Env):
                 Bottom left corner of the rectangular area of the world that will be displayed on screen.
                 Everything outside that rectangle gets clipped (not rendered).
         """
-        if explicit_world_size is not None:
-            return (
-                np.array(explicit_world_size, dtype=np.float32),
-                np.array([0.0, 0.0], dtype=np.float32),
-            )
-
         min_x, min_y = float("inf"), float("inf")
         max_x, max_y = float("-inf"), float("-inf")
         

@@ -47,9 +47,7 @@ class ClothoidTentaclesController:
         dc_high_speed_factor: float = 0.6,  # Factor for Vx >= 3 m/s
         
         # a0, a1 and a2
-        weight_clearance: float = 0.1,
-        weight_curvature: float = 0.2,
-        weight_trajectory: float = 0.5,
+        weights: typing.Tuple[float, float, float] = (0.1, 0.2, 0.5),
         
         # Trajectory criterion parameters
         trajectory_distance_scale: float = 0.3,  # ca in paper (m/rad)
@@ -72,9 +70,7 @@ class ClothoidTentaclesController:
         self.dc_low_speed_factor = dc_low_speed_factor
         self.dc_high_speed_factor = dc_high_speed_factor
         
-        self.weight_clearance = weight_clearance
-        self.weight_curvature = weight_curvature
-        self.weight_trajectory = weight_trajectory
+        self.weight_clearance, self.weight_curvature, self.weight_trajectory = weights
         
         # Trajectory parameters
         self.trajectory_distance_scale = trajectory_distance_scale
@@ -646,16 +642,13 @@ class ClothoidTentaclesController:
         )
         
         steering = np.clip(steering, -max_steering, max_steering)
+        acceleration = np.clip(acceleration, -max_acceleration, max_acceleration)
         
-        # CARLA-compatible: throttle [0, 1], brake [0, 1], reverse 0/1
-        if acceleration >= 0:
-            throttle = min(acceleration / max_acceleration, 1.0)
-            brake = 0.0
-        else:
-            throttle = 0.0
-            brake = min(-acceleration / max_acceleration, 1.0)
+        # Convert acceleration to [0, 1] range
+        accel_normalized = acceleration / max_acceleration
+        accel_action = (accel_normalized + 1.0) / 2.0  # Convert [-1, 1] to [0, 1]
         
-        return np.array([steering, throttle, brake, 0.0], dtype=np.float32)
+        return np.array([steering, accel_action, 0.0, 0.0], dtype=np.float32)
     
     def draw_debug(
         self,
