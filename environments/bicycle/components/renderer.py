@@ -44,7 +44,7 @@ class Renderer:
         if env.road_network is not None:
             self._draw_roads(env)
         
-        if env.global_path is not None and len(env.global_path) > 1:
+        if env.path is not None and len(env.path) > 1:
             self._draw_global_path(env)
         
         self._draw_obstacles(env)
@@ -172,7 +172,7 @@ class Renderer:
     
     def _draw_global_path(self, env) -> None:
         """Draw global path."""
-        global_path = env.global_path
+        global_path = env.path
         path_screen = [env._world_to_screen(p) for p in global_path]
         # Draw path line (closed loop if it's a circular path)
         is_loop = True  # Assume loop by default

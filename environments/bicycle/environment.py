@@ -94,8 +94,7 @@ class BicycleCarEnv(gymnasium.Env):
 
         self.state = None
         
-        self.global_path = None  # Will store waypoints as (N, 2) array
-        self._compute_global_path()
+        self.path = self._compute_global_path()  # Will store waypoints as (N, 2) array
 
         self._episode_data = {
             'actions': [],
@@ -185,60 +184,35 @@ class BicycleCarEnv(gymnasium.Env):
         return max(1, int(meters * self.pixels_per_meter))
 
     def _compute_global_path(self) -> None:
-        """
-        Compute a closed-loop global path following the road centerline.
-        
-        The path starts at spawn, follows the entire road loop in the road's
-        direction, and returns to the spawn point. This is ideal for track-based
-        scenarios where the vehicle navigates the full circuit.
-        """
         if self.road_network is None:
-            # Simple straight line from spawn to goal
-            self.global_path = np.array([self.spawn_pos, self.goal_pos], dtype=np.float32)
+            self.path = np.array(
+                [self.spawn_pos, self.goal_pos], dtype=np.float32
+            )
             return
         
-        # Extract all centerline points from the road network (preserving order)
-        all_centerline_points = []
-        
+        all_points = []
         for road in self.road_network.roads:
             for segment in road.segments:
-                # Use more points for smoother paths (increased density for better controller performance)
-                num_points = max(256, int(segment.get_length() * 5))
-                centerline = segment.get_centerline_points(num_points)
-                all_centerline_points.extend(centerline)
+                num_points = max(50, int(segment.get_length() * 2))
+                all_points.extend(segment.get_centerline_points(num_points))
         
-        if not all_centerline_points:
-            # Fallback to straight line
-            self.global_path = np.array([self.spawn_pos, self.goal_pos], dtype=np.float32)
+        if not all_points:
+            self.path = np.array(
+                [self.spawn_pos, self.goal_pos], dtype=np.float32
+            )
             return
         
-        centerline_array = np.array(all_centerline_points, dtype=np.float32)
+        centerline = np.array(all_points, dtype=np.float32)
         
-        # Find the closest point on centerline to spawn
-        spawn_distances = np.linalg.norm(centerline_array - self.spawn_pos, axis=1)
-        spawn_idx = np.argmin(spawn_distances)
+        # NOTE: find closest point to spawn and reorder path to start there
+        spawn_idx = np.argmin(np.linalg.norm(centerline - self.spawn_pos, axis=1))
+        self.path = np.vstack([
+            centerline[spawn_idx:],
+            centerline[:spawn_idx],
+            [self.spawn_pos]
+        ])
         
-        # Reorder the path to start from spawn_idx and wrap around
-        # This creates a full loop starting and ending near spawn
-        n_points = len(centerline_array)
-        reordered_indices = [(spawn_idx + i) % n_points for i in range(n_points)]
-        reordered_path = centerline_array[reordered_indices]
-        
-        # Build the final path with spawn at start
-        path_points = [self.spawn_pos.copy()]
-        
-        for point in reordered_path:
-            # Only add if not too close to the previous point (avoid duplication)
-            # Reduced threshold for denser path
-            if np.linalg.norm(point - path_points[-1]) > 0.2:
-                path_points.append(point)
-        
-        # Close the loop - return to spawn
-        if np.linalg.norm(self.spawn_pos - path_points[-1]) > 0.2:
-            path_points.append(self.spawn_pos.copy())
-        
-        self.global_path = np.array(path_points, dtype=np.float32)
-        self.global_path_is_loop = True  # Flag to indicate this is a closed loop
+        return self.path
 
     def reset(self, seed: int | None = None) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         super().reset(seed=seed)

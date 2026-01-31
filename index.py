@@ -79,7 +79,7 @@ obs, info = env.reset()
 for i in range(500):
     action = controller.get_action(
         observation=obs,
-        path=env.global_path,
+        path=env.path,
         obstacles=env.obstacles,
         road_network=env.road_network,
         dt=env.dt,
@@ -90,7 +90,7 @@ for i in range(500):
     obs, reward, terminated, truncated, info = env.step(action)
     
     env.overlay_manager.clear()
-    controller.draw_debug(env, obs, env.global_path)
+    controller.draw_debug(env, obs, env.path)
     
     # helpers.preview(env)
 

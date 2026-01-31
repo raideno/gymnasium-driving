@@ -1,4 +1,4 @@
-This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
 
 <file_summary>
 This section contains a summary of this file.
@@ -32,8 +32,7 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Only files matching these patterns are included: controllers/clothoids.py
-- Files matching these patterns are excluded: controllers/*
+- Files matching these patterns are excluded: *.ipynb, */**/*predefined.py
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -42,10 +41,3480 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-
+controllers/
+  __init__.py
+  clothoids.py
+  purepursuit.py
+environments/
+  bicycle/
+    components/
+      roads/
+        __init__.py
+        index.py
+      __init__.py
+      constants.py
+      obstacles.py
+      overlay.py
+      performance.py
+      renderer.py
+    __init__.py
+    environment.py
+  TODOs.md
+metrics/
+  __init__.py
+  cross_track_error.py
+  steering_smoothness.py
+  success_rate.py
+.gitignore
+helpers.py
+index.py
+questions.md
+README.md
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="environments/bicycle/components/roads/__init__.py">
+from .index import *
+from .predefined import *
+</file>
+
+<file path="environments/bicycle/components/roads/index.py">
+# roads/index.py
+
+import abc
+import enum
+import typing
+import dataclasses
+
+import numpy as np
+
+class LaneDirection(enum.Enum):
+    FORWARD = "forward"
+    BACKWARD = "backward"
+    BIDIRECTIONAL = "bidirectional"
+
+@dataclasses.dataclass
+class LaneConfig:
+    num_lanes: int = 2
+    lane_width: float = 3.5
+    direction: LaneDirection = LaneDirection.BIDIRECTIONAL
+
+    @property
+    def total_width(self) -> float:
+        return self.num_lanes * self.lane_width
+
+    @property
+    def half_width(self) -> float:
+        return self.total_width / 2
+
+SINGLE_LANE = LaneConfig(num_lanes=1, lane_width=3.5)
+DOUBLE_LANE = LaneConfig(num_lanes=2, lane_width=3.5)
+TRIPLE_LANE = LaneConfig(num_lanes=3, lane_width=3.5)
+HIGHWAY_LANES = LaneConfig(num_lanes=4, lane_width=3.7)
+
+@dataclasses.dataclass
+class RoadSegment(abc.ABC):
+    @abc.abstractmethod
+    def get_start_pose(self) -> typing.Tuple[np.ndarray, float]:
+        """
+        Return (position, heading) at start of segment.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_end_pose(self) -> typing.Tuple[np.ndarray, float]:
+        """
+        Return (position, heading) at end of segment.
+        """
+        pass
+
+    @abc.abstractmethod
+    def contains_point(self, point: np.ndarray, half_width: float) -> bool:
+        """
+        Check if point is within the road segment bounds.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_centerline_points(self, num_points: int) -> np.ndarray:
+        """
+        Get points along the centerline for rendering.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_boundary_points(
+        self, half_width: float, num_points: int
+    ) -> typing.Tuple[np.ndarray, np.ndarray]:
+        """
+        Get left and right boundary points for rendering.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_length(self) -> float:
+        """
+        Get the length of this segment along the centerline.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_bounds(self, half_width: float) -> typing.Tuple[float, float, float, float]:
+        """
+        Get (min_x, min_y, max_x, max_y) bounds of this segment.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_position_info(
+        self, point: np.ndarray, half_width: float
+    ) -> typing.Dict[str, float]:
+        """
+        Get detailed position information for a point on/near the segment.
+
+        Returns dict with:
+            - 'along': distance along centerline
+            - 'across': perpendicular distance from centerline
+            - 'is_on_segment': 1.0 if point is on segment, 0.0 otherwise
+        """
+        pass
+
+
+@dataclasses.dataclass
+class StraightSegment(RoadSegment):
+    start: typing.Tuple[float, float]
+    heading: float
+    length: float
+
+    def _start_array(self) -> np.ndarray:
+        return np.array(self.start, dtype=np.float32)
+
+    def _direction(self) -> np.ndarray:
+        return np.array(
+            [np.cos(self.heading), np.sin(self.heading)], dtype=np.float32
+        )
+
+    def _perpendicular(self) -> np.ndarray:
+        return np.array(
+            [-np.sin(self.heading), np.cos(self.heading)], dtype=np.float32
+        )
+
+    def get_start_pose(self) -> typing.Tuple[np.ndarray, float]:
+        return self._start_array(), self.heading
+
+    def get_end_pose(self) -> typing.Tuple[np.ndarray, float]:
+        end_pos = self._start_array() + self._direction() * self.length
+        return end_pos, self.heading
+
+    def contains_point(self, point: np.ndarray, half_width: float) -> bool:
+        start = self._start_array()
+        direction = self._direction()
+
+        to_point = point - start
+        along = np.dot(to_point, direction)
+        across = np.dot(to_point, self._perpendicular())
+
+        return 0 <= along <= self.length and abs(across) <= half_width
+
+    def get_centerline_points(self, num_points: int) -> np.ndarray:
+        start = self._start_array()
+        direction = self._direction()
+        t = np.linspace(0, self.length, num_points)
+        return start + np.outer(t, direction)
+
+    def get_boundary_points(
+        self, half_width: float, num_points: int
+    ) -> typing.Tuple[np.ndarray, np.ndarray]:
+        centerline = self.get_centerline_points(num_points)
+        perp = self._perpendicular()
+        left = centerline + perp * half_width
+        right = centerline - perp * half_width
+        return left, right
+
+    def get_length(self) -> float:
+        return self.length
+
+    def get_bounds(
+        self, half_width: float
+    ) -> typing.Tuple[float, float, float, float]:
+        left, right = self.get_boundary_points(half_width, 2)
+        all_points = np.vstack([left, right])
+        return (
+            float(np.min(all_points[:, 0])),
+            float(np.min(all_points[:, 1])),
+            float(np.max(all_points[:, 0])),
+            float(np.max(all_points[:, 1])),
+        )
+
+    def get_position_info(
+        self, point: np.ndarray, half_width: float
+    ) -> typing.Dict[str, float]:
+        start = self._start_array()
+        direction = self._direction()
+        perp = self._perpendicular()
+
+        to_point = point - start
+        along = float(np.dot(to_point, direction))
+        across = float(np.dot(to_point, perp))
+
+        is_on_segment = float(
+            0 <= along <= self.length and abs(across) <= half_width
+        )
+
+        return {
+            "along": along,
+            "across": across,
+            "is_on_segment": is_on_segment,
+        }
+
+@dataclasses.dataclass
+class ArcSegment(RoadSegment):
+    """
+    A curved road segment (arc of a circle).
+
+    The arc starts at `start` with `start_heading` and curves with the given
+    radius. Positive `arc_angle` turns left (counter-clockwise), negative
+    turns right (clockwise).
+    """
+
+    start: typing.Tuple[float, float]
+    start_heading: float  # radians
+    radius: float  # meters, always positive
+    arc_angle: float  # radians, positive = left turn, negative = right turn
+
+    def _start_array(self) -> np.ndarray:
+        return np.array(self.start, dtype=np.float32)
+
+    def _get_center(self) -> np.ndarray:
+        """Compute the center of the arc circle."""
+        start = self._start_array()
+        if self.arc_angle >= 0:
+            perp = np.array(
+                [-np.sin(self.start_heading), np.cos(self.start_heading)],
+                dtype=np.float32,
+            )
+        else:
+            perp = np.array(
+                [np.sin(self.start_heading), -np.cos(self.start_heading)],
+                dtype=np.float32,
+            )
+        return start + perp * self.radius
+
+    def _get_start_angle(self) -> float:
+        """Get the angle from center to start point."""
+        center = self._get_center()
+        start = self._start_array()
+        diff = start - center
+        return float(np.arctan2(diff[1], diff[0]))
+
+    def get_start_pose(self) -> typing.Tuple[np.ndarray, float]:
+        return self._start_array(), self.start_heading
+
+    def get_end_pose(self) -> typing.Tuple[np.ndarray, float]:
+        center = self._get_center()
+        start_angle = self._get_start_angle()
+        end_angle = start_angle + self.arc_angle
+
+        end_pos = center + self.radius * np.array(
+            [np.cos(end_angle), np.sin(end_angle)], dtype=np.float32
+        )
+        end_heading = self.start_heading + self.arc_angle
+        end_heading = float(np.arctan2(np.sin(end_heading), np.cos(end_heading)))
+        return end_pos, end_heading
+
+    def contains_point(self, point: np.ndarray, half_width: float) -> bool:
+        center = self._get_center()
+        dist_to_center = float(np.linalg.norm(point - center))
+
+        inner_radius = self.radius - half_width
+        outer_radius = self.radius + half_width
+        if not (inner_radius <= dist_to_center <= outer_radius):
+            return False
+
+        start_angle = self._get_start_angle()
+        point_angle = float(
+            np.arctan2(point[1] - center[1], point[0] - center[0])
+        )
+
+        if self.arc_angle >= 0:
+            angle_diff = point_angle - start_angle
+            while angle_diff < 0:
+                angle_diff += 2 * np.pi
+            while angle_diff > 2 * np.pi:
+                angle_diff -= 2 * np.pi
+            return 0 <= angle_diff <= self.arc_angle
+        else:
+            angle_diff = start_angle - point_angle
+            while angle_diff < 0:
+                angle_diff += 2 * np.pi
+            while angle_diff > 2 * np.pi:
+                angle_diff -= 2 * np.pi
+            return 0 <= angle_diff <= abs(self.arc_angle)
+
+    def get_centerline_points(self, num_points: int) -> np.ndarray:
+        center = self._get_center()
+        start_angle = self._get_start_angle()
+        angles = np.linspace(start_angle, start_angle + self.arc_angle, num_points)
+        points = np.zeros((num_points, 2), dtype=np.float32)
+        points[:, 0] = center[0] + self.radius * np.cos(angles)
+        points[:, 1] = center[1] + self.radius * np.sin(angles)
+        return points
+
+    def get_boundary_points(
+        self, half_width: float, num_points: int
+    ) -> typing.Tuple[np.ndarray, np.ndarray]:
+        center = self._get_center()
+        start_angle = self._get_start_angle()
+        angles = np.linspace(start_angle, start_angle + self.arc_angle, num_points)
+
+        inner_radius = self.radius - half_width
+        outer_radius = self.radius + half_width
+
+        inner = np.zeros((num_points, 2), dtype=np.float32)
+        outer = np.zeros((num_points, 2), dtype=np.float32)
+
+        inner[:, 0] = center[0] + inner_radius * np.cos(angles)
+        inner[:, 1] = center[1] + inner_radius * np.sin(angles)
+        outer[:, 0] = center[0] + outer_radius * np.cos(angles)
+        outer[:, 1] = center[1] + outer_radius * np.sin(angles)
+
+        if self.arc_angle >= 0:
+            return outer, inner
+        else:
+            return inner, outer
+
+    def get_length(self) -> float:
+        return abs(self.arc_angle) * self.radius
+
+    def get_bounds(
+        self, half_width: float
+    ) -> typing.Tuple[float, float, float, float]:
+        num_points = max(20, int(self.get_length()))
+        left, right = self.get_boundary_points(half_width, num_points)
+        all_points = np.vstack([left, right])
+        return (
+            float(np.min(all_points[:, 0])),
+            float(np.min(all_points[:, 1])),
+            float(np.max(all_points[:, 0])),
+            float(np.max(all_points[:, 1])),
+        )
+
+    def get_position_info(
+        self, point: np.ndarray, half_width: float
+    ) -> typing.Dict[str, float]:
+        center = self._get_center()
+        dist_to_center = float(np.linalg.norm(point - center))
+
+        inner_radius = self.radius - half_width
+        outer_radius = self.radius + half_width
+        on_radial = (
+            1.0 if inner_radius <= dist_to_center <= outer_radius else 0.0
+        )
+
+        start_angle = self._get_start_angle()
+        point_angle = float(
+            np.arctan2(point[1] - center[1], point[0] - center[0])
+        )
+        across = dist_to_center - self.radius
+
+        if self.arc_angle >= 0:
+            angle_diff = point_angle - start_angle
+            while angle_diff < 0:
+                angle_diff += 2 * np.pi
+            while angle_diff > 2 * np.pi:
+                angle_diff -= 2 * np.pi
+            on_angular = float(0 <= angle_diff <= self.arc_angle)
+            along = angle_diff * self.radius
+        else:
+            angle_diff = start_angle - point_angle
+            while angle_diff < 0:
+                angle_diff += 2 * np.pi
+            while angle_diff > 2 * np.pi:
+                angle_diff -= 2 * np.pi
+            on_angular = float(0 <= angle_diff <= abs(self.arc_angle))
+            along = angle_diff * self.radius
+
+        is_on_segment = float(on_radial > 0.5 and on_angular > 0.5)
+
+        return {
+            "along": along,
+            "across": across,
+            "is_on_segment": is_on_segment,
+        }
+
+
+@dataclasses.dataclass
+class Road:
+    """
+    A road composed of connected segments with lane configuration.
+
+    Segments are automatically connected end-to-end.
+    """
+
+    segments: typing.List[RoadSegment]
+    lane_config: LaneConfig = dataclasses.field(default_factory=lambda: DOUBLE_LANE)
+    # Rendering hints for junction handling
+    # Specifies how much to trim from boundaries at each end (in meters)
+    # This prevents boundary lines from extending into intersecting roads
+    start_trim: float = 0.0
+    end_trim: float = 0.0
+
+    def contains_point(self, point: np.ndarray) -> bool:
+        """Check if a point is on this road."""
+        half_width = self.lane_config.half_width
+        for segment in self.segments:
+            if segment.contains_point(point, half_width):
+                return True
+        return False
+
+    def get_total_length(self) -> float:
+        """Get total road length."""
+        return sum(seg.get_length() for seg in self.segments)
+
+    def get_bounds(self) -> typing.Tuple[float, float, float, float]:
+        """Get (min_x, min_y, max_x, max_y) bounds of this road."""
+        if not self.segments:
+            return (0, 0, 0, 0)
+
+        half_width = self.lane_config.half_width
+        min_x, min_y = float("inf"), float("inf")
+        max_x, max_y = float("-inf"), float("-inf")
+
+        for segment in self.segments:
+            bounds = segment.get_bounds(half_width)
+            min_x = min(min_x, bounds[0])
+            min_y = min(min_y, bounds[1])
+            max_x = max(max_x, bounds[2])
+            max_y = max(max_y, bounds[3])
+
+        return (min_x, min_y, max_x, max_y)
+
+    @property
+    def start_pose(self) -> typing.Tuple[np.ndarray, float]:
+        """Get the starting pose of the road."""
+        if not self.segments:
+            return np.zeros(2, dtype=np.float32), 0.0
+        return self.segments[0].get_start_pose()
+
+    @property
+    def end_pose(self) -> typing.Tuple[np.ndarray, float]:
+        """Get the ending pose of the road."""
+        if not self.segments:
+            return np.zeros(2, dtype=np.float32), 0.0
+        return self.segments[-1].get_end_pose()
+
+    def get_road_info(self, point: np.ndarray) -> typing.Dict[str, typing.Any]:
+        """Get comprehensive road information for a point."""
+        half_width = self.lane_config.half_width
+
+        on_road = False
+        min_dist_to_center = float("inf")
+        distance_to_left = float("inf")
+        distance_to_right = float("inf")
+        along_segment = 0.0
+        segment_index = -1
+
+        for idx, segment in enumerate(self.segments):
+            pos_info = segment.get_position_info(point, half_width)
+            dist_to_center = abs(pos_info["across"])
+
+            if pos_info["is_on_segment"] > 0.5:
+                on_road = True
+                segment_index = idx
+                along_segment = pos_info["along"]
+                min_dist_to_center = 0.0
+                across = pos_info["across"]
+                distance_to_left = half_width - across
+                distance_to_right = half_width + across
+                break
+            elif dist_to_center < min_dist_to_center:
+                min_dist_to_center = dist_to_center
+                along_segment = pos_info["along"]
+                segment_index = idx
+                across = pos_info["across"]
+                distance_to_left = half_width - across
+                distance_to_right = half_width + across
+
+        return {
+            "on_road": on_road,
+            "distance_to_center": (
+                min_dist_to_center
+                if min_dist_to_center != float("inf")
+                else float("inf")
+            ),
+            "distance_to_left_boundary": max(0.0, distance_to_left),
+            "distance_to_right_boundary": max(0.0, distance_to_right),
+            "along_segment": along_segment,
+            "segment_index": segment_index,
+        }
+
+
+class RoadBuilder:
+    """Builder for creating roads with chained segments."""
+
+    def __init__(
+        self,
+        start: typing.Tuple[float, float],
+        heading: float,
+        lane_config: LaneConfig = DOUBLE_LANE,
+    ):
+        self._current_pos = np.array(start, dtype=np.float32)
+        self._current_heading = heading
+        self._segments: typing.List[RoadSegment] = []
+        self._lane_config = lane_config
+
+    def straight(self, length: float) -> "RoadBuilder":
+        """Add a straight segment (length in meters)."""
+        segment = StraightSegment(
+            start=tuple(self._current_pos),
+            heading=self._current_heading,
+            length=length,
+        )
+        self._segments.append(segment)
+        end_pos, end_heading = segment.get_end_pose()
+        self._current_pos = end_pos
+        self._current_heading = end_heading
+        return self
+
+    def turn_left(self, radius: float, angle_degrees: float) -> "RoadBuilder":
+        """Add a left turn (radius in meters)."""
+        arc_angle = np.radians(angle_degrees)
+        segment = ArcSegment(
+            start=tuple(self._current_pos),
+            start_heading=self._current_heading,
+            radius=radius,
+            arc_angle=arc_angle,
+        )
+        self._segments.append(segment)
+        end_pos, end_heading = segment.get_end_pose()
+        self._current_pos = end_pos
+        self._current_heading = end_heading
+        return self
+
+    def turn_right(self, radius: float, angle_degrees: float) -> "RoadBuilder":
+        """Add a right turn (radius in meters)."""
+        arc_angle = -np.radians(angle_degrees)
+        segment = ArcSegment(
+            start=tuple(self._current_pos),
+            start_heading=self._current_heading,
+            radius=radius,
+            arc_angle=arc_angle,
+        )
+        self._segments.append(segment)
+        end_pos, end_heading = segment.get_end_pose()
+        self._current_pos = end_pos
+        self._current_heading = end_heading
+        return self
+
+    def turn(self, radius: float, angle_degrees: float) -> "RoadBuilder":
+        """Add a turn. Positive angle = left, negative = right."""
+        if angle_degrees >= 0:
+            return self.turn_left(radius, angle_degrees)
+        else:
+            return self.turn_right(radius, abs(angle_degrees))
+
+    def build(self) -> Road:
+        """Build and return the road."""
+        return Road(segments=self._segments, lane_config=self._lane_config)
+
+
+@dataclasses.dataclass
+class RoadNetwork:
+    """A collection of roads forming a network."""
+
+    roads: typing.List[Road] = dataclasses.field(default_factory=list)
+
+    def add_road(self, road: Road) -> None:
+        """Add a road to the network."""
+        self.roads.append(road)
+
+    def contains_point(self, point: np.ndarray) -> bool:
+        """Check if a point is on any road in the network."""
+        for road in self.roads:
+            if road.contains_point(point):
+                return True
+        return False
+
+    def is_off_road(self, point: np.ndarray) -> bool:
+        """Check if a point is off all roads."""
+        return not self.contains_point(point)
+
+    def get_bounds(self) -> typing.Tuple[float, float, float, float]:
+        """Get (min_x, min_y, max_x, max_y) bounds of the entire network."""
+        if not self.roads:
+            return (0, 0, 0, 0)
+
+        min_x, min_y = float("inf"), float("inf")
+        max_x, max_y = float("-inf"), float("-inf")
+
+        for road in self.roads:
+            bounds = road.get_bounds()
+            min_x = min(min_x, bounds[0])
+            min_y = min(min_y, bounds[1])
+            max_x = max(max_x, bounds[2])
+            max_y = max(max_y, bounds[3])
+
+        return (min_x, min_y, max_x, max_y)
+
+    def get_comprehensive_road_info(
+        self, point: np.ndarray, heading: float
+    ) -> typing.Dict[str, typing.Any]:
+        """Get comprehensive road and lane information for vehicle position."""
+        best_road = None
+        best_road_info = None
+        min_center_dist = float("inf")
+
+        for road in self.roads:
+            road_info = road.get_road_info(point)
+            dist_to_center = road_info["distance_to_center"]
+
+            if road_info["on_road"]:
+                best_road = road
+                best_road_info = road_info
+                break
+            elif dist_to_center < min_center_dist:
+                best_road = road
+                best_road_info = road_info
+                min_center_dist = dist_to_center
+
+        if best_road_info is None or not best_road:
+            return {
+                "on_road": False,
+                "distance_to_road_center": float("inf"),
+                "distance_to_left_boundary": float("inf"),
+                "distance_to_right_boundary": float("inf"),
+                "lane_number": -1,
+                "num_lanes": 0,
+                "lane_width": 0.0,
+                "road_width": 0.0,
+                "distance_to_lane_center": float("inf"),
+                "intersecting_left_boundary": False,
+                "intersecting_right_boundary": False,
+                "in_single_lane": False,
+                "in_multiple_lanes": False,
+                "relative_heading": 0.0,
+            }
+
+        on_road = best_road_info["on_road"]
+        dist_left = best_road_info["distance_to_left_boundary"]
+        dist_right = best_road_info["distance_to_right_boundary"]
+        lane_width = best_road.lane_config.lane_width
+        num_lanes = best_road.lane_config.num_lanes
+        road_width = best_road.lane_config.total_width
+
+        across_dist = dist_left - best_road.lane_config.half_width
+        lane_number = int((num_lanes - 1) / 2) - int(
+            across_dist / lane_width
+        )
+        lane_number = max(0, min(lane_number, num_lanes - 1))
+
+        # Compute distance to current lane center
+        # Lane centers are positioned at regular intervals from the road center
+        # For num_lanes=1: lane 0 center is at road center (offset=0)
+        # For num_lanes=2: lane 0 at -lane_width/2, lane 1 at +lane_width/2
+        # General formula: offset from road center for lane i
+        lane_center_offset = (lane_number - (num_lanes - 1) / 2) * lane_width
+        distance_to_lane_center = best_road_info["distance_to_center"] - lane_center_offset
+
+        # Car half-width ~1m for boundary intersection check
+        car_half_width = 1.0
+        intersecting_left = dist_left < car_half_width
+        intersecting_right = dist_right < car_half_width
+
+        in_single_lane = not intersecting_left and not intersecting_right
+        in_multiple_lanes = intersecting_left or intersecting_right
+
+        relative_heading = 0.0
+
+        return {
+            "on_road": on_road,
+            "distance_to_road_center": best_road_info["distance_to_center"],
+            "distance_to_left_boundary": dist_left,
+            "distance_to_right_boundary": dist_right,
+            "lane_number": lane_number if on_road else -1,
+            "num_lanes": num_lanes,
+            "lane_width": lane_width,
+            "road_width": road_width,
+            "distance_to_lane_center": distance_to_lane_center,
+            "intersecting_left_boundary": intersecting_left,
+            "intersecting_right_boundary": intersecting_right,
+            "in_single_lane": in_single_lane,
+            "in_multiple_lanes": in_multiple_lanes,
+            "relative_heading": relative_heading,
+        }
+</file>
+
+<file path="environments/bicycle/components/__init__.py">
+from .obstacles import *
+</file>
+
+<file path="environments/bicycle/components/constants.py">
+white = (255, 255, 255)
+black = (0, 0, 0)
+red = (220, 60, 60)
+green = (60, 180, 60)
+blue = (60, 60, 220)
+gray = (140, 140, 140)
+dark_gray = (80, 80, 80)
+yellow = (255, 220, 50)
+light_gray = (220, 220, 220)
+</file>
+
+<file path="environments/bicycle/components/obstacles.py">
+import abc
+import typing
+import dataclasses
+
+import numpy as np
+
+MotionFn = typing.Callable[[float, typing.Tuple[float, float]], typing.Tuple[float, float]]
+
+def static() -> MotionFn:
+    return lambda t, init: init
+
+def circular(radius: float, angular_speed: float, center: typing.Tuple[float, float] = None) -> MotionFn:
+    def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
+        cx, cy = center if center is not None else (init[0], init[1] - radius)
+        angle = angular_speed * t
+        return (cx + radius * np.cos(angle), cy + radius * np.sin(angle))
+    return motion
+
+def linear(velocity: typing.Tuple[float, float]) -> MotionFn:
+    def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
+        return (init[0] + velocity[0] * t, init[1] + velocity[1] * t)
+    return motion
+
+def oscillate(axis: str, amplitude: float, frequency: float) -> MotionFn:
+    def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
+        offset = amplitude * np.sin(2 * np.pi * frequency * t)
+        if axis == 'x':
+            return (init[0] + offset, init[1])
+        else:
+            return (init[0], init[1] + offset)
+    return motion
+
+def figure_eight(size: float, speed: float) -> MotionFn:
+    def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
+        angle = speed * t
+        x = size * np.sin(angle)
+        y = size * np.sin(angle) * np.cos(angle)
+        return (init[0] + x, init[1] + y)
+    return motion
+
+def waypoints(
+    points: typing.List[typing.Tuple[float, float]], 
+    speed: float, 
+    loop: bool = True
+) -> MotionFn:
+    def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
+        if len(points) == 0:
+            return init
+        if len(points) == 1:
+            return points[0]
+        
+        # Calculate total path length and segment lengths
+        segments = []
+        total_length = 0.0
+        for i in range(len(points)):
+            if i == len(points) - 1:
+                if loop:
+                    next_pt = points[0]
+                else:
+                    break
+            else:
+                next_pt = points[i + 1]
+            seg_len = np.sqrt((next_pt[0] - points[i][0])**2 + (next_pt[1] - points[i][1])**2)
+            segments.append((points[i], next_pt, seg_len))
+            total_length += seg_len
+        
+        if total_length == 0:
+            return points[0]
+        
+        # Find current position along path
+        distance = (speed * t) % total_length if loop else min(speed * t, total_length)
+        
+        accumulated = 0.0
+        for start_pt, end_pt, seg_len in segments:
+            if accumulated + seg_len >= distance:
+                # Interpolate within this segment
+                ratio = (distance - accumulated) / seg_len if seg_len > 0 else 0
+                x = start_pt[0] + ratio * (end_pt[0] - start_pt[0])
+                y = start_pt[1] + ratio * (end_pt[1] - start_pt[1])
+                return (x, y)
+            accumulated += seg_len
+        
+        return points[-1] if not loop else points[0]
+    return motion
+
+@dataclasses.dataclass
+class Obstacle(abc.ABC):
+    center: typing.Tuple[float, float]
+    motion: MotionFn = dataclasses.field(default_factory=static)
+    
+    def __post_init__(self):
+        self._initial_center = self.center
+        self._current_time = 0.0
+
+    def update(self, time: float) -> None:
+        self._current_time = time
+        self.center = self.motion(time, self._initial_center)
+    
+    def reset(self) -> None:
+        self._current_time = 0.0
+        self.center = self._initial_center
+
+    @abc.abstractmethod
+    def check_collision(self, point: np.ndarray) -> bool:
+        pass
+
+    @abc.abstractmethod
+    def get_type(self) -> str:
+        pass
+
+    @abc.abstractmethod
+    def get_bounds(self) -> typing.Tuple[float, float, float, float]:
+        pass
+
+
+@dataclasses.dataclass
+class Circle(Obstacle):
+    radius: float = 0.0
+
+    def check_collision(self, point: np.ndarray) -> bool:
+        center_array = np.array(self.center, dtype=np.float32)
+        dist = np.linalg.norm(point - center_array)
+        return dist <= self.radius
+
+    def get_type(self) -> str:
+        return "circle"
+
+    def get_bounds(self) -> typing.Tuple[float, float, float, float]:
+        return (
+            self.center[0] - self.radius,
+            self.center[1] - self.radius,
+            self.center[0] + self.radius,
+            self.center[1] + self.radius,
+        )
+
+@dataclasses.dataclass
+class Rectangle(Obstacle):
+    width: float = 0.0
+    height: float = 0.0
+
+    def check_collision(self, point: np.ndarray) -> bool:
+        center_array = np.array(self.center, dtype=np.float32)
+        half_width = self.width / 2
+        half_height = self.height / 2
+
+        dx = abs(point[0] - center_array[0])
+        dy = abs(point[1] - center_array[1])
+
+        return dx <= half_width and dy <= half_height
+
+    def get_type(self) -> str:
+        return "rectangle"
+
+    def get_bounds(self) -> typing.Tuple[float, float, float, float]:
+        return (
+            self.center[0] - self.width / 2,
+            self.center[1] - self.height / 2,
+            self.center[0] + self.width / 2,
+            self.center[1] + self.height / 2,
+        )
+</file>
+
+<file path="environments/bicycle/components/overlay.py">
+import typing
+import pygame
+
+import numpy as np
+
+class OverlayManager:
+    def __init__(self):
+        self._overlays: typing.List[typing.Dict[str, typing.Any]] = []
+    
+    def clear(self) -> None:
+        self._overlays.clear()
+    
+    def add_circle(
+        self,
+        center: typing.Tuple[float, float],
+        radius: float,
+        color: typing.Tuple[int, int, int] = (255, 0, 0),
+        width: int = 0,
+    ) -> None:
+        self._overlays.append({
+            "type": "circle",
+            "center": center,
+            "radius": radius,
+            "color": color,
+            "width": width,
+        })
+    
+    def add_point(
+        self,
+        position: typing.Tuple[float, float],
+        color: typing.Tuple[int, int, int] = (255, 0, 0),
+        size: int = 5,
+    ) -> None:
+        self._overlays.append({
+            "type": "point",
+            "position": position,
+            "color": color,
+            "size": size,
+        })
+    
+    def add_line(
+        self,
+        start: typing.Tuple[float, float],
+        end: typing.Tuple[float, float],
+        color: typing.Tuple[int, int, int] = (255, 0, 0),
+        width: int = 2,
+    ) -> None:
+        self._overlays.append({
+            "type": "line",
+            "start": start,
+            "end": end,
+            "color": color,
+            "width": width,
+        })
+    
+    def add_path(
+        self,
+        points: np.ndarray,
+        color: typing.Tuple[int, int, int] = (255, 0, 0),
+        width: int = 2,
+        closed: bool = False,
+    ) -> None:
+        self._overlays.append({
+            "type": "path",
+            "points": points,
+            "color": color,
+            "width": width,
+            "closed": closed,
+        })
+    
+    def add_arrow(
+        self,
+        start: typing.Tuple[float, float],
+        end: typing.Tuple[float, float],
+        color: typing.Tuple[int, int, int] = (255, 0, 0),
+        width: int = 2,
+        head_size: float = 0.5,
+    ) -> None:
+        self._overlays.append({
+            "type": "arrow",
+            "start": start,
+            "end": end,
+            "color": color,
+            "width": width,
+            "head_size": head_size,
+        })
+    
+    def add_text(
+        self,
+        position: typing.Tuple[float, float],
+        text: str,
+        color: typing.Tuple[int, int, int] = (0, 0, 0),
+        font_size: int = 20,
+    ) -> None:
+        self._overlays.append({
+            "type": "text",
+            "position": position,
+            "text": text,
+            "color": color,
+            "font_size": font_size,
+        })
+    
+    def render(
+        self,
+        screen: pygame.Surface,
+        world_to_screen: typing.Callable,
+        meters_to_pixels: typing.Callable,
+    ) -> None:
+        """
+        Render all overlays on the screen.
+        
+        Args:
+            screen: Pygame surface to draw on
+            world_to_screen: Function to convert world coords to screen coords
+            meters_to_pixels: Function to convert meters to pixels
+        """
+        for overlay in self._overlays:
+            overlay_type = overlay["type"]
+            
+            if overlay_type == "circle":
+                center_screen = world_to_screen(overlay["center"])
+                radius_px = meters_to_pixels(overlay["radius"])
+                pygame.draw.circle(
+                    screen,
+                    overlay["color"],
+                    center_screen,
+                    max(1, radius_px),
+                    overlay["width"],
+                )
+            
+            elif overlay_type == "point":
+                pos_screen = world_to_screen(overlay["position"])
+                pygame.draw.circle(
+                    screen,
+                    overlay["color"],
+                    pos_screen,
+                    overlay["size"],
+                )
+            
+            elif overlay_type == "line":
+                start_screen = world_to_screen(overlay["start"])
+                end_screen = world_to_screen(overlay["end"])
+                pygame.draw.line(
+                    screen,
+                    overlay["color"],
+                    start_screen,
+                    end_screen,
+                    overlay["width"],
+                )
+            
+            elif overlay_type == "path":
+                points = overlay["points"]
+                if len(points) >= 2:
+                    points_screen = [world_to_screen(p) for p in points]
+                    pygame.draw.lines(
+                        screen,
+                        overlay["color"],
+                        overlay["closed"],
+                        points_screen,
+                        overlay["width"],
+                    )
+            
+            elif overlay_type == "arrow":
+                start = np.array(overlay["start"])
+                end = np.array(overlay["end"])
+                start_screen = world_to_screen(start)
+                end_screen = world_to_screen(end)
+                
+                # Main Line
+                pygame.draw.line(
+                    screen,
+                    overlay["color"],
+                    start_screen,
+                    end_screen,
+                    overlay["width"],
+                )
+                
+                # Arrow Head
+                direction = end - start
+                length = np.linalg.norm(direction)
+                if length > 0.01:
+                    direction = direction / length
+                    perpendicular = np.array([-direction[1], direction[0]])
+                    head_size = overlay["head_size"]
+                    
+                    head_left = end - direction * head_size + perpendicular * head_size * 0.5
+                    head_right = end - direction * head_size - perpendicular * head_size * 0.5
+                    
+                    head_points = [
+                        end_screen,
+                        world_to_screen(head_left),
+                        world_to_screen(head_right),
+                    ]
+                    pygame.draw.polygon(screen, overlay["color"], head_points)
+            
+            elif overlay_type == "text":
+                pos_screen = world_to_screen(overlay["position"])
+                font = pygame.font.Font(None, overlay["font_size"])
+                text_surface = font.render(overlay["text"], True, overlay["color"])
+                screen.blit(text_surface, pos_screen)
+</file>
+
+<file path="environments/bicycle/components/performance.py">
+import time
+import typing
+import pygame
+
+class PerformanceTracker:
+    """
+    Tracks and displays performance metrics like FPS, simulation time, and step count.
+    """
+    
+    def __init__(self, show_performance: bool = True):
+        self._start_time: float | None = None
+        self._last_step_time: float | None = None
+        self._fps: float = 0.0
+        self._step_count: int = 0
+        self._show_performance: bool = show_performance
+    
+    def reset(self) -> None:
+        self._start_time = time.time()
+        self._last_step_time = self._start_time
+        self._fps = 0.0
+        self._step_count = 0
+    
+    def update(self) -> None:
+        current_time = time.time()
+        self._step_count += 1
+        
+        if self._last_step_time is not None:
+            frame_delta = current_time - self._last_step_time
+            if frame_delta > 0:
+                # NOTE: exponentially moving average for smooth FPS
+                self._fps = 0.9 * self._fps + 0.1 * (1.0 / frame_delta)
+        
+        self._last_step_time = current_time
+    
+    def render(
+        self,
+        screen: pygame.Surface,
+        screen_size: typing.Tuple[int, int],
+        sim_time: float,
+    ) -> None:
+        """
+        Draw FPS and elapsed time in the top-right corner.
+        
+        Args:
+            screen: Pygame surface to draw on
+            screen_size: Screen dimensions (width, height)
+            sim_time: Current simulation time
+        """
+        if not self._show_performance or screen is None:
+            return
+        
+        font = pygame.font.Font(None, 24)
+        
+        lines = [
+            f"FPS: {self.fps:.1f}",
+            f"Sim: {sim_time:.2f}s",
+            f"Real: {self.elapsed_time:.2f}s",
+            f"Steps: {self._step_count}",
+        ]
+        
+        for i, line in enumerate(lines):
+            text = font.render(line, True, (0, 0, 0))
+            text_rect = text.get_rect()
+            text_rect.topright = (screen_size[0] - 10, 10 + i * 22)
+            screen.blit(text, text_rect)
+    
+    @property
+    def fps(self) -> float:
+        return self._fps
+    
+    @property
+    def elapsed_time(self) -> float:
+        if self._start_time is None:
+            return 0.0
+        return time.time() - self._start_time
+    
+    @property
+    def step_count(self) -> int:
+        return self._step_count
+    
+    def show_performance(self, show: bool = True) -> None:
+        self._show_performance = show
+</file>
+
+<file path="environments/bicycle/components/renderer.py">
+import typing
+import pygame
+
+import numpy as np
+
+import environments.bicycle.components.constants as constants
+
+class Renderer:
+    def __init__(
+        self,
+        screen_size: typing.Tuple[int, int],
+        render_mode: str | None,
+        render_fps: int = 30,
+    ):
+        self.screen_size = screen_size
+        self.render_mode = render_mode
+        self.render_fps = render_fps
+        
+        self.screen: pygame.Surface | None = None
+        self.clock: pygame.time.Clock | None = None
+    
+    def initialize(self) -> None:
+        if self.screen is None:
+            pygame.init()
+            if self.render_mode == "human":
+                pygame.display.init()
+                self.screen = pygame.display.set_mode(self.screen_size)
+                pygame.display.set_caption("Bicycle Car Environment")
+            else:
+                self.screen = pygame.Surface(self.screen_size)
+            self.clock = pygame.time.Clock()
+    
+    def render_frame(self, env) -> np.ndarray | None:
+        """
+        Returns:
+            RGB array if render_mode is "rgb_array", None otherwise
+        """
+        self.initialize()
+        
+        self.screen.fill(constants.light_gray)
+        
+        self._draw_grid(env)
+        
+        if env.road_network is not None:
+            self._draw_roads(env)
+        
+        if env.global_path is not None and len(env.global_path) > 1:
+            self._draw_global_path(env)
+        
+        self._draw_obstacles(env)
+        
+        self._draw_goal(env)
+        
+        if env.state is not None:
+            self._draw_car(env)
+        
+        self._draw_spawn(env)
+        
+        self._draw_scale_indicator(env)
+        
+        self._draw_info_text(env)
+        
+        env.overlay_manager.render(self.screen, env._world_to_screen, env._meters_to_pixels)
+
+        env.performance_tracker.render(self.screen, self.screen_size, env.simulation_time)
+        
+        if self.render_mode == "human":
+            pygame.event.pump()
+            pygame.display.flip()
+            self.clock.tick(self.render_fps)
+            return None
+        
+        return np.transpose(
+            np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
+        )
+    
+    def _draw_grid(self, env) -> None:
+        grid_spacing = 10.0  # meters
+        grid_color = (200, 200, 200)
+        
+        min_x, min_y = env.world_origin
+        max_x = min_x + env.world_size[0]
+        max_y = min_y + env.world_size[1]
+        
+        # Vertical grid lines
+        x = np.ceil(min_x / grid_spacing) * grid_spacing
+        while x <= max_x:
+            start = env._world_to_screen((x, min_y))
+            end = env._world_to_screen((x, max_y))
+            pygame.draw.line(self.screen, grid_color, start, end, 1)
+            x += grid_spacing
+        
+        # Horizontal grid lines
+        y = np.ceil(min_y / grid_spacing) * grid_spacing
+        while y <= max_y:
+            start = env._world_to_screen((min_x, y))
+            end = env._world_to_screen((max_x, y))
+            pygame.draw.line(self.screen, grid_color, start, end, 1)
+            y += grid_spacing
+    
+    def _draw_roads(self, env) -> None:
+        """Draw road network."""
+        # First pass: draw all road surfaces (polygons)
+        for road in env.road_network.roads:
+            half_width = road.lane_config.half_width
+            
+            for segment in road.segments:
+                num_points = max(20, int(segment.get_length() * 2))
+                left, right = segment.get_boundary_points(half_width, num_points)
+                
+                left_screen = [env._world_to_screen(p) for p in left]
+                right_screen = [env._world_to_screen(p) for p in right]
+                
+                polygon_points = left_screen + right_screen[::-1]
+                if len(polygon_points) >= 3:
+                    pygame.draw.polygon(self.screen, constants.gray, polygon_points)
+        
+        # Second pass: draw boundary lines and center lines
+        for road in env.road_network.roads:
+            half_width = road.lane_config.half_width
+            num_lanes = road.lane_config.num_lanes
+            total_length = road.get_total_length()
+            
+            # Calculate trim amounts in terms of fraction of total length
+            start_trim_frac = road.start_trim / total_length if total_length > 0 else 0
+            end_trim_frac = road.end_trim / total_length if total_length > 0 else 0
+            
+            for seg_idx, segment in enumerate(road.segments):
+                seg_length = segment.get_length()
+                num_points = max(20, int(seg_length * 2))
+                left, right = segment.get_boundary_points(half_width, num_points)
+                
+                # Calculate which points to trim for this segment
+                is_first_segment = seg_idx == 0
+                is_last_segment = seg_idx == len(road.segments) - 1
+                
+                # Trim start of first segment
+                start_idx = 0
+                if is_first_segment and road.start_trim > 0:
+                    trim_points = int(road.start_trim / seg_length * num_points)
+                    start_idx = min(trim_points, num_points - 2)
+                
+                # Trim end of last segment
+                end_idx = num_points
+                if is_last_segment and road.end_trim > 0:
+                    trim_points = int(road.end_trim / seg_length * num_points)
+                    end_idx = max(num_points - trim_points, start_idx + 2)
+                
+                # Get trimmed boundary points
+                left_trimmed = left[start_idx:end_idx]
+                right_trimmed = right[start_idx:end_idx]
+                
+                left_screen = [env._world_to_screen(p) for p in left_trimmed]
+                right_screen = [env._world_to_screen(p) for p in right_trimmed]
+                
+                if len(left_screen) >= 2:
+                    pygame.draw.lines(self.screen, constants.dark_gray, False, left_screen, 3)
+                    pygame.draw.lines(self.screen, constants.dark_gray, False, right_screen, 3)
+                
+                centerline = segment.get_centerline_points(num_points)
+                if num_lanes > 1:
+                    center_screen = [env._world_to_screen(p) for p in centerline]
+                    for i in range(0, len(center_screen) - 1, 4):
+                        end_idx = min(i + 2, len(center_screen) - 1)
+                        pygame.draw.line(
+                            self.screen,
+                            constants.yellow,
+                            center_screen[i],
+                            center_screen[end_idx],
+                            2,
+                        )
+    
+    def _draw_global_path(self, env) -> None:
+        """Draw global path."""
+        global_path = env.global_path
+        path_screen = [env._world_to_screen(p) for p in global_path]
+        # Draw path line (closed loop if it's a circular path)
+        is_loop = True  # Assume loop by default
+        pygame.draw.lines(self.screen, (150, 100, 200), is_loop, path_screen, 2)
+        # Draw waypoints as small circles (only every few points for cleaner look)
+        step = max(1, len(path_screen) // 128)  # Show ~30 waypoint markers max
+        for i in range(0, len(path_screen), step):
+            point = path_screen[i]
+            # Color start point constants.green, others purple
+            if i == 0:
+                color = (100, 200, 100)
+                radius = 6
+            else:
+                color = (150, 100, 200)
+                radius = 3
+            pygame.draw.circle(self.screen, color, point, radius)
+    
+    def _draw_obstacles(self, env) -> None:
+        for obs in env.obstacles:
+            center_screen = env._world_to_screen(obs.center)
+            # Import here to avoid circular dependency
+            from ..components.obstacles import Circle, Rectangle
+            if isinstance(obs, Circle):
+                radius_px = env._meters_to_pixels(obs.radius)
+                pygame.draw.circle(self.screen, constants.red, center_screen, radius_px)
+                pygame.draw.circle(self.screen, constants.dark_gray, center_screen, radius_px, 2)
+            elif isinstance(obs, Rectangle):
+                width_px = env._meters_to_pixels(obs.width)
+                height_px = env._meters_to_pixels(obs.height)
+                rect = pygame.Rect(
+                    center_screen[0] - width_px // 2,
+                    center_screen[1] - height_px // 2,
+                    width_px,
+                    height_px,
+                )
+                pygame.draw.rect(self.screen, constants.red, rect)
+                pygame.draw.rect(self.screen, constants.dark_gray, rect, 2)
+    
+    def _draw_goal(self, env) -> None:
+        goal_screen = env._world_to_screen(env.goal_pos)
+        goal_radius_px = env._meters_to_pixels(env.goal_radius)
+        pygame.draw.circle(self.screen, constants.green, goal_screen, goal_radius_px)
+        pygame.draw.circle(self.screen, constants.dark_gray, goal_screen, goal_radius_px, 2)
+    
+    def _draw_car(self, env) -> None:
+        """Draw car as a proper rectangle with heading."""
+        state = env.state
+        x, y, theta, v = state
+        
+        # Use instance car dimensions
+        half_length = env.CAR_LENGTH / 2
+        half_width = env.CAR_WIDTH / 2
+        
+        # Get car corners using the helper method
+        corners_world = env._get_car_corners()
+        
+        # Convert to screen coordinates
+        corners_screen = [env._world_to_screen(corner) for corner in corners_world]
+        
+        # Draw car body
+        pygame.draw.polygon(self.screen, constants.blue, corners_screen)
+        pygame.draw.polygon(self.screen, constants.dark_gray, corners_screen, 2)
+        
+        # Draw front indicator (small triangle at front)
+        pos = np.array([x, y])
+        c, s = np.cos(theta), np.sin(theta)
+        rot = np.array([[c, -s], [s, c]])
+        front_center = pos + rot @ np.array([half_length, 0])
+        front_left = pos + rot @ np.array([half_length - 0.5, half_width * 0.5])
+        front_right = pos + rot @ np.array([half_length - 0.5, -half_width * 0.5])
+        front_points = [
+            env._world_to_screen(front_center),
+            env._world_to_screen(front_left),
+            env._world_to_screen(front_right),
+        ]
+        pygame.draw.polygon(self.screen, (100, 100, 220), front_points)
+    
+    def _draw_spawn(self, env) -> None:
+        """Draw spawn marker."""
+        spawn_screen = env._world_to_screen(env.spawn_pos)
+        pygame.draw.circle(self.screen, constants.black, spawn_screen, 5)
+        pygame.draw.circle(self.screen, constants.white, spawn_screen, 3)
+    
+    def _draw_scale_indicator(self, env) -> None:
+        """Draw a scale bar showing real-world distance."""
+        # Draw a 10-meter scale bar in the bottom-right corner
+        scale_length_m = 10.0
+        scale_length_px = env._meters_to_pixels(scale_length_m)
+        
+        bar_x = self.screen_size[0] - scale_length_px - 20
+        bar_y = self.screen_size[1] - 30
+        
+        # Draw the bar
+        pygame.draw.line(
+            self.screen,
+            (0, 0, 0),
+            (bar_x, bar_y),
+            (bar_x + scale_length_px, bar_y),
+            3,
+        )
+        # End caps
+        pygame.draw.line(
+            self.screen, (0, 0, 0), (bar_x, bar_y - 5), (bar_x, bar_y + 5), 2
+        )
+        pygame.draw.line(
+            self.screen,
+            (0, 0, 0),
+            (bar_x + scale_length_px, bar_y - 5),
+            (bar_x + scale_length_px, bar_y + 5),
+            2,
+        )
+        
+        # Label
+        font = pygame.font.Font(None, 20)
+        text = font.render(f"{scale_length_m:.0f}m", True, (0, 0, 0))
+        text_rect = text.get_rect(center=(bar_x + scale_length_px // 2, bar_y - 12))
+        self.screen.blit(text, text_rect)
+    
+    def _draw_info_text(self, env) -> None:
+        """Draw current state information."""
+        state = env.state
+        if state is None:
+            return
+        
+        font = pygame.font.Font(None, 24)
+        x, y, theta, v = state
+        
+        lines = [
+            f"Position: ({x:.1f}m, {y:.1f}m)",
+            f"Heading: {np.degrees(theta):.1f} deg",
+            f"Velocity: {v:.1f} m/s ({v * 3.6:.1f} km/h)",
+        ]
+        
+        if env.road_network is not None:
+            on_road = not env.road_network.is_off_road(state[:2])
+            lines.append(f"On road: {'Yes' if on_road else 'No'}")
+        
+        for i, line in enumerate(lines):
+            text = font.render(line, True, (0, 0, 0))
+            self.screen.blit(text, (10, 10 + i * 22))
+    
+    def close(self) -> None:
+        if self.screen is not None:
+            pygame.quit()
+            self.screen = None
+            self.clock = None
+</file>
+
+<file path="metrics/__init__.py">
+from .success_rate import compute_success_rate
+from .cross_track_error import compute_cross_track_error
+from .steering_smoothness import compute_steering_smoothness
+</file>
+
+<file path="metrics/cross_track_error.py">
+import numpy as np
+
+def compute_cross_track_error(
+    positions: list[np.ndarray],
+    reference_path: np.ndarray,
+) -> dict[str, float]:
+    """
+    Compute the Cross-Track Error (CTE) metrics for a trajectory.
+    
+    CTE measures the minimum lateral deviation of the vehicle's position
+    from the reference path at each timestep.
+    
+    Args:
+        positions: List of vehicle positions (x, y) at each timestep
+        reference_path: Reference path waypoints as (N, 2) array
+        
+    Returns:
+        Dictionary containing:
+            - 'cte_rms': Root-mean-square CTE over the episode
+            - 'cte_mean': Mean CTE
+            - 'cte_max': Maximum CTE
+            - 'cte_std': Standard deviation of CTE
+            
+    Formula:
+        CTE(t) = min_{w ∈ P_ref} ||p_cog(t) - w||_2
+        
+        CTE_RMS = sqrt((1/T) * Σ CTE(t)^2)
+        
+    where p_cog(t) is the vehicle's center of gravity position at time t,
+    and P_ref is the reference path.
+    
+    Lower CTE_RMS values indicate superior path tracking accuracy.
+    """
+    if not positions or len(reference_path) == 0:
+        return {
+            'cte_rms': float('inf'),
+            'cte_mean': float('inf'),
+            'cte_max': float('inf'),
+            'cte_std': 0.0,
+        }
+    
+    positions = np.array(positions)
+    cte_values = []
+    
+    # Compute CTE for each position
+    for pos in positions:
+        # Calculate distance to all waypoints
+        distances = np.linalg.norm(reference_path - pos, axis=1)
+        # Minimum distance is the CTE
+        min_distance = np.min(distances)
+        cte_values.append(min_distance)
+    
+    cte_values = np.array(cte_values)
+    
+    # Compute statistics
+    cte_rms = np.sqrt(np.mean(cte_values ** 2))
+    cte_mean = np.mean(cte_values)
+    cte_max = np.max(cte_values)
+    cte_std = np.std(cte_values)
+    
+    return {
+        'cte_rms': float(cte_rms),
+        'cte_mean': float(cte_mean),
+        'cte_max': float(cte_max),
+        'cte_std': float(cte_std),
+    }
+</file>
+
+<file path="metrics/steering_smoothness.py">
+import numpy as np
+
+def compute_steering_smoothness(
+    steering_angles: list[float],
+    dt: float = 0.1,
+) -> dict[str, float]:
+    """
+    Compute steering smoothness metrics based on steering angle derivatives.
+    
+    Steering smoothness is assessed using the third derivative of the steering
+    angle (jerk), which captures how abruptly steering changes occur.
+    Lower values indicate smoother, more human-like driving behavior.
+    
+    Args:
+        steering_angles: List of steering angles (radians) at each timestep
+        dt: Time step duration (seconds)
+        
+    Returns:
+        Dictionary containing:
+            - 'steering_jerk_rms': Root-mean-square of steering jerk (rad/s^3)
+            - 'steering_jerk_mean': Mean absolute steering jerk
+            - 'steering_jerk_max': Maximum absolute steering jerk
+            - 'steering_rate_rms': RMS of first derivative (rad/s)
+            - 'steering_accel_rms': RMS of second derivative (rad/s^2)
+            
+    Formula:
+        δ'(t) = dδ/dt (steering rate)
+        δ''(t) = d²δ/dt² (steering acceleration)
+        δ'''(t) = d³δ/dt³ (steering jerk)
+        
+    The steering jerk metric captures passenger comfort and actuator wear.
+    Lower jerk values indicate smoother control.
+    """
+    if len(steering_angles) < 4:
+        # Need at least 4 points to compute third derivative
+        return {
+            'steering_jerk_rms': 0.0,
+            'steering_jerk_mean': 0.0,
+            'steering_jerk_max': 0.0,
+            'steering_rate_rms': 0.0,
+            'steering_accel_rms': 0.0,
+        }
+    
+    steering_angles = np.array(steering_angles)
+    
+    # First derivative: steering rate (rad/s)
+    steering_rate = np.diff(steering_angles) / dt
+    
+    # Second derivative: steering acceleration (rad/s^2)
+    steering_accel = np.diff(steering_rate) / dt
+    
+    # Third derivative: steering jerk (rad/s^3)
+    steering_jerk = np.diff(steering_accel) / dt
+    
+    # Compute metrics
+    steering_jerk_rms = np.sqrt(np.mean(steering_jerk ** 2))
+    steering_jerk_mean = np.mean(np.abs(steering_jerk))
+    steering_jerk_max = np.max(np.abs(steering_jerk))
+    
+    steering_rate_rms = np.sqrt(np.mean(steering_rate ** 2))
+    steering_accel_rms = np.sqrt(np.mean(steering_accel ** 2))
+    
+    return {
+        'steering_jerk_rms': float(steering_jerk_rms),
+        'steering_jerk_mean': float(steering_jerk_mean),
+        'steering_jerk_max': float(steering_jerk_max),
+        'steering_rate_rms': float(steering_rate_rms),
+        'steering_accel_rms': float(steering_accel_rms),
+    }
+</file>
+
+<file path="metrics/success_rate.py">
+import numpy as np
+
+def compute_success_rate(
+    episodes_data: list[dict],
+    max_lateral_acceleration: float = 4.0,
+) -> float:
+    """
+    Compute the success rate across multiple episodes.
+    
+    Success is defined as an episode that:
+    - Remained within the drivable corridor (on_road = True throughout)
+    - Had no collisions (terminated = False due to collision)
+    - Had lateral acceleration below max threshold
+    
+    Args:
+        episodes_data: List of episode dictionaries, each containing:
+            - 'on_road': List of on_road flags for each timestep
+            - 'terminated': Whether episode terminated (collision)
+            - 'truncated': Whether episode was truncated (timeout/goal)
+            - 'lateral_accelerations': List of lateral accelerations (optional)
+        max_lateral_acceleration: Maximum allowed lateral acceleration (m/s^2)
+        
+    Returns:
+        success_rate: Proportion of successful episodes [0, 1]
+        
+    Formula:
+        S_R = (1/N) * Σ I{e_i ∈ E_success}
+        
+    where I{·} is the indicator function and E_success is the set of episodes
+    satisfying all safety constraints.
+    """
+    if not episodes_data:
+        return 0.0
+    
+    n_episodes = len(episodes_data)
+    n_successful = 0
+    
+    for episode in episodes_data:
+        on_road = episode.get('on_road', [])
+        terminated = episode.get('terminated', False)
+        lateral_accels = episode.get('lateral_accelerations', [])
+        
+        # Check if stayed on road throughout episode
+        stayed_on_road = all(on_road) if on_road else False
+        
+        # Check if no collision (terminated due to collision, not goal/truncation)
+        no_collision = not terminated
+        
+        # Check if lateral acceleration was within limits
+        if lateral_accels:
+            lat_accel_ok = all(abs(a) < max_lateral_acceleration for a in lateral_accels)
+        else:
+            lat_accel_ok = True  # No data means we assume it's ok
+        
+        # Episode is successful if all conditions are met
+        if stayed_on_road and no_collision and lat_accel_ok:
+            n_successful += 1
+    
+    success_rate = n_successful / n_episodes
+    return success_rate
+</file>
+
+<file path="helpers.py">
+import io
+from io import BytesIO
+
+from PIL import Image as PILImage
+from IPython.display import display, clear_output
+
+# NOTE: render_mode must be set to rgb_array
+
+def preview(
+    environment,
+):
+    image = environment.render()
+    clear_output(wait=True)
+    
+    pil_img = PILImage.fromarray(image)
+    
+    display(pil_img)
+</file>
+
+<file path="index.py">
+import cristal
+
+import environments
+import environments.bicycle as bicycle
+
+import controllers.manual as manual
+import controllers.stanley as stanley
+import controllers.clothoids as clothoids
+import controllers.purepursuit as purepursuit
+import controllers.clothoids_road_aware as clothoids_road_aware
+
+
+env = cristal.build_cristal_environment(render_mode="human")
+
+controller = clothoids.ClothoidTentaclesController(
+    num_tentacles=41,
+    # Time horizon constant,
+    t0=7.0,
+    # Length offset constant,
+    l0=5.0,
+    num_points_per_tentacle=50,
+
+    wheelbase=1.75,
+    # m/s^2,
+    max_lateral_accel=4.0,
+    # Comfortable braking deceleration,
+    max_decel=1.5,
+
+    # Selection weights (from paper),
+    weight_clearance=0.1,          # a0,
+    weight_curvature=0.2,          # a1,
+    weight_trajectory=0.5,         # a2,
+
+    # Velocity control,
+    # m/s,
+    target_velocity=5.0,
+    kp_velocity=2.0,
+)
+
+controller = clothoids_road_aware.ClothoidRoadAwareController(
+    num_tentacles=41,
+    t0=7.0,
+    l0=5.0,
+    num_points_per_tentacle=50,
+
+    wheelbase=1.75,
+    vehicle_width=1.8,
+    max_lateral_accel=4.0,
+    max_decel=1.5,
+
+    # Road boundary parameters
+    road_boundary_margin=0.3,      # Safety margin from road edge
+    
+    # Selection weights (enhanced with road boundary)
+    weight_clearance=0.1,          # a0
+    weight_curvature=0.15,         # a1
+    weight_trajectory=0.45,        # a2
+    weight_road_boundary=0.3,      # a3 (new)
+
+    target_velocity=6.0,
+    kp_velocity=2.0,
+)
+
+controller = purepursuit.PurePursuitController(
+    lookahead_distance=6.0,
+    min_lookahead=3.0,
+    max_lookahead=12.0,
+    wheelbase=1.75,
+    target_velocity=8.0,
+    kp_velocity=2.0
+)
+
+controller = manual.ManualController(
+    steering_speed=0.8,    # How fast steering changes (rad/s)
+)
+
+obs, info = env.reset()
+
+for i in range(500):
+    action = controller.get_action(
+        observation=obs,
+        path=env.global_path,
+        obstacles=env.obstacles,
+        road_network=env.road_network,
+        dt=env.dt,
+        max_steering=env.max_steering,
+        max_acceleration=env.max_acceleration,
+    )
+    
+    obs, reward, terminated, truncated, info = env.step(action)
+    
+    env.overlay_manager.clear()
+    controller.draw_debug(env, obs, env.global_path)
+    
+    # helpers.preview(env)
+
+    if terminated or truncated:
+        break
+
+env.close()
+
+print(f"\nSimulation completed after {env.performance_tracker.step_count} steps")
+print(f"Final position: {obs['position']}")
+print(f"Final velocity: {obs['velocity'][0]:.2f} m/s")
+</file>
+
+<file path="questions.md">
+> So autonomous driving is a supervised learning task, tesla has all the data, they just need to annotate it all and the network would receive the current state and predict the action to take, no reinforcement learning is required in here ? And same thing for controlling a robotic arm to learn to transfer objects between bins, we don't need any reinforcement learning do we ?
+
+Indeed, they first train classical neural networks to predict what and how to control, but on top of that they add reinforcement learning through **RLHF** (Reinforcement Learning From Human Feedback) to handle out of distribution scenarios.
+</file>
+
+<file path="README.md">
+# Simple Gymnasium Environment for Control Algorithms
+
+No rewarding nor termination system is implemented, you can extend the environment to add your own.
+</file>
+
+<file path="environments/bicycle/__init__.py">
+from .environment import *
+</file>
+
+<file path="environments/TODOs.md">
+- [x] Have all the dimensions be to scale, replicate parking lot, renault zoe dimensions, etc.
+- [ ] Implement some control algorithms.
+  - [ ] Rule based.
+  - [ ] Discretized Q-Learning.
+  - [ ] Policy Gradient.
+  - [ ] Imitation Learning. https://www.youtube.com/watch?v=GDmhrAHxgQE
+  - [ ] Neural Network Based Controllers, etc.
+  - [x] Pure Pursuit.
+  - [x] Stanley.
+  - [x] PID.
+  - [x] Clothoids.
+- [x] Add real timing, fps and a controllable speed up of time.
+- [x] Add collision with road sides. Enabled overall and controllable on road network on creation on each individual segment.
+- [ ] Add "Distance" to lane center into the observation data.
+
+- [ ] Ask what is the speed used for the car for test drives.
+- [ ] Understand and simplify the clothoid based controller.
+- [ ] Make the clothoid based controller with other types of functions such as polynoms, etc.
+- [ ] Make the environment more realistic by returning predictions in the observation state, like possibility to add a model that'll take the observation and return a prediction.
+</file>
+
+<file path="controllers/__init__.py">
+from .purepursuit import *
+from .clothoids import *
+</file>
+
+<file path=".gitignore">
+# Created by https://www.toptal.com/developers/gitignore/api/python,venv
+# Edit at https://www.toptal.com/developers/gitignore?templates=python,venv
+
+.DS_Store
+
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/#use-with-ide
+.pdm.toml
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+### Python Patch ###
+# Poetry local configuration file - https://python-poetry.org/docs/configuration/#local-configuration
+poetry.toml
+
+# ruff
+.ruff_cache/
+
+# LSP config files
+pyrightconfig.json
+
+### venv ###
+# Virtualenv
+# http://iamzed.com/2009/05/07/a-primer-on-virtualenv/
+[Bb]in
+[Ii]nclude
+[Ll]ib
+[Ll]ib64
+[Ll]ocal
+[Ss]cripts
+pyvenv.cfg
+pip-selfcheck.json
+
+# End of https://www.toptal.com/developers/gitignore/api/python,venv
+
+repomix-output.xml
+</file>
+
+<file path="controllers/clothoids.py">
+import typing
+import dataclasses
+
+import numpy as np
+
+from scipy import integrate
+
+@dataclasses.dataclass
+class Tentacle:
+    # NOTE: [N, 2]
+    points: np.ndarray
+    
+    # p0, Δρ/Δl, ρend
+    initial_curvature: float
+    curvature_rate: float
+    final_curvature: float
+    
+    is_navigable: bool = True
+    distance_to_obstacle: float = float('inf')
+    exits_road: bool = False
+    
+    # V_clearance, V_curvature, V_trajectory, V_combined
+    clearance_score: float = 0.0
+    curvature_score: float = 0.0
+    trajectory_score: float = 0.0
+    combined_score: float = 0.0
+    
+    index: int = 0
+
+class ClothoidTentaclesController:
+    def __init__(
+        self,
+        num_tentacles: int = 41,
+        t0: float = 7.0,           # Time horizon constant (seconds)
+        l0: float = 5.0,           # Length offset constant (meters)
+        min_tentacle_length: float = 2.0,  # Minimum length at low speeds
+        num_points_per_tentacle: int = 50,
+        
+        wheelbase: float = 2.5,
+        vehicle_width: float = 1.8,  # Width of the vehicle in meters
+        max_lateral_acceleration: float = 4.0,
+        max_deceleration: float = 1.5,
+        
+        # Classification zone parameters
+        base_dc: float = 1.4,      # Base classification zone width
+        dc_low_speed_factor: float = 0.2,   # Factor for Vx < 3 m/s
+        dc_high_speed_factor: float = 0.6,  # Factor for Vx >= 3 m/s
+        
+        # a0, a1 and a2
+        weights: typing.Tuple[float, float, float] = (0.1, 0.2, 0.5),
+        
+        # Trajectory criterion parameters
+        trajectory_distance_scale: float = 0.3,  # ca in paper (m/rad)
+        
+        target_velocity: float = 6.0,
+        kp_velocity: float = 2.0,
+    ):
+        self.num_tentacles = num_tentacles
+        self.t0 = t0
+        self.l0 = l0
+        self.min_tentacle_length = min_tentacle_length
+        self.num_points = num_points_per_tentacle
+        
+        self.wheelbase = wheelbase
+        self.vehicle_width = vehicle_width
+        self.max_lateral_acceleration = max_lateral_acceleration
+        self.max_deceleration = max_deceleration
+        
+        self.base_dc = base_dc
+        self.dc_low_speed_factor = dc_low_speed_factor
+        self.dc_high_speed_factor = dc_high_speed_factor
+        
+        self.weight_clearance, self.weight_curvature, self.weight_trajectory = weights
+        
+        # Trajectory parameters
+        self.trajectory_distance_scale = trajectory_distance_scale
+        
+        # Velocity control
+        self.target_velocity = target_velocity
+        self.kp_velocity = kp_velocity
+        
+        # State for visualization and debugging
+        self.tentacles: typing.List[Tentacle] = []
+        self.navigable_tentacles: typing.List[Tentacle] = []
+        self.best_tentacle: typing.Optional[Tentacle] = None
+        self.classification_radius: float = 0.0
+        
+        # Store current steering for tentacle generation
+        self._current_steering: float = 0.0
+    
+    def _compute_tentacle_length(self, velocity: float) -> float:
+        """
+        Equation (7) from paper.
+        """
+        if velocity > 1.0:
+            return self.t0 * velocity - self.l0
+        else:
+            return self.min_tentacle_length
+    
+    def _compute_collision_distance(self, velocity: float) -> float:
+        """
+        Equation (6) from paper.
+        """
+        # if velocity <= 0.1:
+        #     return 1.0
+        return (velocity ** 2) / self.max_deceleration
+    
+    def _compute_max_curvature(self, velocity: float) -> float:
+        """
+        After equation (5) from paper.
+        """
+        # if velocity <= 0.5:
+        #     return 0.5
+        return self.max_lateral_acceleration / (velocity ** 2)
+    
+    def _compute_initial_curvature(self, steering_angle: float) -> float:
+        """
+        After equation (5) from paper.
+        """
+        return np.tan(steering_angle) / self.wheelbase
+    
+    def _compute_classification_width(self, velocity: float) -> float:
+        """
+        Before equation (6) from paper.
+        """
+        if velocity < 3.0:
+            return self.base_dc + self.dc_low_speed_factor * velocity / 3.0
+        else:
+            return 1.6 + self.dc_high_speed_factor * (velocity - 3.0) / 15.0
+    
+    def _generate_clothoid_points(
+        self,
+        initial_curvature: float,
+        curvature_rate: float,
+        length: float,
+        initial_heading: float = 0.0,
+        initial_position: typing.Tuple[float, float] = (0.0, 0.0),
+    ) -> np.ndarray:
+        """
+        Equation (1) and (2) from paper.
+        """
+        points = np.zeros((self.num_points, 2))
+        arc_lengths = np.linspace(0, length, self.num_points)
+        
+        x0, y0 = initial_position
+        phi0 = initial_heading
+        rho0 = initial_curvature
+        drho_dl = curvature_rate
+        
+        for i, s in enumerate(arc_lengths):
+            if i == 0:
+                points[i] = [x0, y0]
+                continue
+            
+            def integrand_x(t):
+                theta = phi0 + rho0 * t + 0.5 * drho_dl * t * t
+                return np.cos(theta)
+            
+            def integrand_y(t):
+                theta = phi0 + rho0 * t + 0.5 * drho_dl * t * t
+                return np.sin(theta)
+            
+            x_integral, _ = integrate.quad(integrand_x, 0, s)
+            y_integral, _ = integrate.quad(integrand_y, 0, s)
+            
+            points[i] = [x0 + x_integral, y0 + y_integral]
+        
+        return points
+    
+    def _transform_to_world(
+        self,
+        local_points: np.ndarray,
+        position: np.ndarray,
+        heading: float,
+    ) -> np.ndarray:
+        """Transform points from vehicle-local to world coordinates."""
+        cos_h = np.cos(heading)
+        sin_h = np.sin(heading)
+        
+        # Rotation matrix
+        rotation = np.array([
+            [cos_h, -sin_h],
+            [sin_h, cos_h]
+        ])
+        
+        # Transform each point
+        world_points = np.zeros_like(local_points)
+        for i, point in enumerate(local_points):
+            world_points[i] = position + rotation @ point
+        
+        return world_points
+    
+    def generate_tentacles(
+        self,
+        position: np.ndarray,
+        heading: float,
+        velocity: float,
+        steering_angle: float,
+    ) -> typing.List[Tentacle]:
+        tentacles = []
+        
+        tentacle_length = self._compute_tentacle_length(abs(velocity))
+        collision_distance = self._compute_collision_distance(abs(velocity))
+        max_curvature = self._compute_max_curvature(max(abs(velocity), 0.5))
+        initial_curvature = self._compute_initial_curvature(steering_angle)
+        
+        self.classification_radius = self._compute_classification_width(abs(velocity))
+        
+        # Generate curvature rates for each tentacle
+        # At distance Lc, curvatures should span from -ρmax to +ρmax
+        # Δρ/Δl = (ρ_target - ρ0) / Lc
+        
+        # Ensure collision_distance is not too small
+        lc = max(collision_distance, 1.0)
+        
+        for i in range(self.num_tentacles):
+            # Linear interpolation of target curvature at Lc
+            t = i / (self.num_tentacles - 1) if self.num_tentacles > 1 else 0.5
+            target_curvature_at_lc = -max_curvature + 2 * max_curvature * t
+            
+            curvature_rate = (target_curvature_at_lc - initial_curvature) / lc
+            
+            final_curvature = initial_curvature + curvature_rate * tentacle_length
+            
+            local_points = self._generate_clothoid_points(
+                initial_curvature=initial_curvature,
+                curvature_rate=curvature_rate,
+                length=tentacle_length,
+                initial_heading=0.0,
+                initial_position=(0.0, 0.0),
+            )
+            
+            world_points = self._transform_to_world(
+                local_points, position, heading
+            )
+            
+            tentacle = Tentacle(
+                points=world_points,
+                initial_curvature=initial_curvature,
+                curvature_rate=curvature_rate,
+                final_curvature=final_curvature,
+                index=i,
+            )
+            tentacles.append(tentacle)
+        
+        self.tentacles = tentacles
+        return tentacles
+    
+    def classify_tentacles(
+        self,
+        tentacles: typing.List[Tentacle],
+        obstacles: typing.List,
+        velocity: float,
+        road_network=None,
+    ) -> typing.List[Tentacle]:
+        """
+        A tentacle is non-navigable if:
+        1. Any obstacle is within the classification zone (dc) and closer than the collision distance (Lc)
+        2. It exits the road boundaries (if road_network provided)
+        """
+        dc = self._compute_classification_width(abs(velocity))
+        lc = self._compute_collision_distance(abs(velocity))
+        
+        navigable = []
+        
+        for tentacle in tentacles:
+            is_navigable = True
+            exits_road = False
+            min_obstacle_distance = float('inf')
+            
+            cumulative_distance = 0.0
+            
+            for i in range(len(tentacle.points) - 1):
+                p1 = tentacle.points[i]
+                p2 = tentacle.points[i + 1]
+                segment_length = np.linalg.norm(p2 - p1)
+                
+                if cumulative_distance > lc:
+                    break
+                
+                # Check road boundaries - account for vehicle width
+                if road_network is not None and not exits_road:
+                    # Check centerline
+                    if not road_network.contains_point(p1):
+                        exits_road = True
+                        is_navigable = False
+                    else:
+                        # Check if vehicle width fits within road
+                        # Get direction perpendicular to path segment
+                        if i < len(tentacle.points) - 1:
+                            tangent = p2 - p1
+                            tangent_norm = np.linalg.norm(tangent)
+                            if tangent_norm > 1e-6:
+                                tangent = tangent / tangent_norm
+                                perpendicular = np.array([-tangent[1], tangent[0]])
+                                
+                                # Check points at vehicle half-width on both sides
+                                half_width = self.vehicle_width / 2.0
+                                left_point = p1 + perpendicular * half_width
+                                right_point = p1 - perpendicular * half_width
+                                
+                                if not road_network.contains_point(left_point) or \
+                                   not road_network.contains_point(right_point):
+                                    exits_road = True
+                                    is_navigable = False
+                
+                # Check obstacles
+                for obstacle in obstacles:
+                    obs_center = np.array(obstacle.center)
+                    
+                    if hasattr(obstacle, 'radius'):
+                        obs_radius = obstacle.radius
+                    else:
+                        obs_radius = np.sqrt(
+                            (obstacle.width / 2) ** 2 + 
+                            (obstacle.height / 2) ** 2
+                        )
+                    
+                    dist_to_center = np.linalg.norm(p1 - obs_center)
+                    dist_to_surface = dist_to_center - obs_radius
+                    
+                    if dist_to_surface < min_obstacle_distance:
+                        min_obstacle_distance = dist_to_surface
+                    
+                    if dist_to_surface < dc and cumulative_distance < lc:
+                        is_navigable = False
+                
+                cumulative_distance += segment_length
+            
+            tentacle.is_navigable = is_navigable
+            tentacle.exits_road = exits_road
+            tentacle.distance_to_obstacle = max(0.0, min_obstacle_distance)
+            
+            if is_navigable:
+                navigable.append(tentacle)
+        
+        self.navigable_tentacles = navigable
+        return navigable
+    
+    def compute_clearance_score(
+        self,
+        tentacle: Tentacle,
+        l_half: float = 20.0,
+    ) -> float:
+        """
+        Equation (7) from paper.
+        0 means maximum clearance, no obstacle.
+        Higher values mean closer obstacles.
+        """
+        if tentacle.distance_to_obstacle >= 1000.0:
+            return 0.0
+        c = np.log(1.0 / 3.0) / l_half
+        score = 2.0 - 2.0 / (1.0 + np.exp(-c * tentacle.distance_to_obstacle))
+        return score
+    
+    def compute_curvature_score(
+        self,
+        tentacle: Tentacle,
+        velocity: float,
+    ) -> float:
+        """
+        Equation (7.2) from paper.
+        Penalizes large curvature changes, promoting smoother paths.
+        0 means no curvature rate (change), 1 means maximum allowed curvature rate.
+        """
+        max_curvature = self._compute_max_curvature(max(abs(velocity), 0.5))
+        lc = self._compute_collision_distance(abs(velocity))
+        # max_curvature_rate = 2.0 * max_curvature / max(lc, 0.1)
+        # if max_curvature_rate < 1e-6:
+        #     return 0.0
+        return abs(tentacle.curvature_rate) / (2.0 * max_curvature / max(lc, 0.1))
+    
+    def compute_trajectory_score(
+        self,
+        tentacle: Tentacle,
+        reference_path: np.ndarray,
+        velocity: float,
+    ) -> float:
+        """
+        Equation (8) and (9) from paper.
+        
+        How well a given tentacle points toward and stays close to the global reference path.
+        We pick a point on the tentacle at the collision distance Lc, and we compare it to the reference trajectory using:
+        - b: distance to the trajectory (lateral distance to path).
+        - alpha: heading difference to the trajectory.
+        """
+        lc = self._compute_collision_distance(abs(velocity))
+        
+        # Find tentacle point at collision distance Lc
+        cumulative_dist = 0.0
+        eval_point_idx = 0
+        for i in range(len(tentacle.points) - 1):
+            p1 = tentacle.points[i]
+            p2 = tentacle.points[i + 1]
+            segment_length = np.linalg.norm(p2 - p1)
+            cumulative_dist += segment_length
+            if cumulative_dist >= lc:
+                eval_point_idx = i + 1
+                break
+        eval_point_idx = min(eval_point_idx, len(tentacle.points) - 1)
+        eval_point = tentacle.points[eval_point_idx]
+        
+        # Find closest point on reference path
+        if len(reference_path) < 2:
+            return 0.0
+        distances = np.linalg.norm(reference_path - eval_point, axis=1)
+        closest_idx = np.argmin(distances)
+        
+        b = distances[closest_idx]
+        
+        # Calculate heading difference
+        ### Get tentacle heading at evaluation point
+        if eval_point_idx > 0:
+            tentacle_direction = (
+                tentacle.points[eval_point_idx] - 
+                tentacle.points[eval_point_idx - 1]
+            )
+        else:
+            tentacle_direction = (
+                tentacle.points[1] - tentacle.points[0]
+            )
+        tentacle_heading = np.arctan2(
+            tentacle_direction[1], tentacle_direction[0]
+        )
+        ### Get path heading at closest point
+        if closest_idx < len(reference_path) - 1:
+            path_direction = (
+                reference_path[closest_idx + 1] - 
+                reference_path[closest_idx]
+            )
+        else:
+            path_direction = (
+                reference_path[closest_idx] - 
+                reference_path[closest_idx - 1]
+            )
+        path_heading = np.arctan2(path_direction[1], path_direction[0])
+        alpha = tentacle_heading - path_heading
+        alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
+        
+        v_dist = b + self.trajectory_distance_scale * abs(alpha)
+        
+        return v_dist
+    
+    def select_best_tentacle(
+        self,
+        navigable_tentacles: typing.List[Tentacle],
+        reference_path: np.ndarray,
+        velocity: float,
+    ) -> typing.Optional[Tentacle]:
+        """
+        Before equation (7) from paper.
+        The tentacle with lowest V_combined is selected.
+        """
+        if not navigable_tentacles:
+            return None
+        
+        for tentacle in navigable_tentacles:
+            tentacle.clearance_score = self.compute_clearance_score(tentacle)
+            tentacle.curvature_score = self.compute_curvature_score(
+                tentacle, velocity
+            )
+            tentacle.trajectory_score = self.compute_trajectory_score(
+                tentacle, reference_path, velocity
+            )
+        
+        # Normalize trajectory scores to [0, 1]
+        traj_scores = [t.trajectory_score for t in navigable_tentacles]
+        min_traj = min(traj_scores)
+        max_traj = max(traj_scores)
+        range_traj = max_traj - min_traj if max_traj > min_traj else 1.0
+        for tentacle in navigable_tentacles:
+            tentacle.trajectory_score = (
+                (tentacle.trajectory_score - min_traj) / range_traj
+            )
+        
+        for tentacle in navigable_tentacles:
+            tentacle.combined_score = (
+                self.weight_clearance * tentacle.clearance_score +
+                self.weight_curvature * tentacle.curvature_score +
+                self.weight_trajectory * tentacle.trajectory_score
+            )
+        
+        best = min(navigable_tentacles, key=lambda t: t.combined_score)
+        self.best_tentacle = best
+        return best
+    
+    def select_emergency_tentacle(
+        self,
+        tentacles: typing.List[Tentacle],
+    ) -> typing.Optional[Tentacle]:
+        if not tentacles:
+            return None
+        best = max(tentacles, key=lambda t: t.distance_to_obstacle)
+        self.best_tentacle = best
+        return best
+    
+    def compute_steering_simple(
+        self,
+        position: np.ndarray,
+        heading: float,
+        velocity: float,
+        tentacle: Tentacle,
+    ) -> float:
+        """
+        Simplified steering controller (pure pursuit-like).
+        
+        Used when full vehicle dynamics are not available.
+        """
+        # Find lookahead point on tentacle
+        lookahead_distance = max(2.0, abs(velocity) * 0.5)
+        
+        cumulative_dist = 0.0
+        lookahead_idx = 0
+        
+        for i in range(len(tentacle.points) - 1):
+            p1 = tentacle.points[i]
+            p2 = tentacle.points[i + 1]
+            segment_length = np.linalg.norm(p2 - p1)
+            cumulative_dist += segment_length
+            
+            if cumulative_dist >= lookahead_distance:
+                lookahead_idx = i + 1
+                break
+        
+        lookahead_idx = min(lookahead_idx, len(tentacle.points) - 1)
+        lookahead_point = tentacle.points[lookahead_idx]
+        
+        # Vector from vehicle to lookahead point
+        dx = lookahead_point[0] - position[0]
+        dy = lookahead_point[1] - position[1]
+        
+        # Distance to lookahead point
+        ld = np.sqrt(dx**2 + dy**2)
+        if ld < 0.1:
+            return 0.0
+        
+        # Transform to vehicle coordinate frame
+        lookahead_angle = np.arctan2(dy, dx)
+        alpha = lookahead_angle - heading
+        alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
+        
+        # Pure pursuit steering formula
+        steering = np.arctan2(2.0 * self.wheelbase * np.sin(alpha), ld)
+        
+        # Store current steering for next iteration
+        self._current_steering = steering
+        
+        return steering
+    
+    def compute_acceleration(
+        self,
+        current_velocity: float,
+        has_navigable_path: bool,
+        emergency_braking: bool = False,
+    ) -> float:
+        """
+        Compute acceleration command.
+        
+        Args:
+            current_velocity: Current vehicle velocity
+            has_navigable_path: Whether a navigable tentacle exists
+            emergency_braking: Whether to perform emergency braking
+        """
+        if emergency_braking or not has_navigable_path:
+            # Emergency braking with maximum comfortable deceleration
+            return -self.max_deceleration
+        
+        # Normal velocity control
+        velocity_error = self.target_velocity - current_velocity
+        return self.kp_velocity * velocity_error
+    
+    def get_action(
+        self,
+        observation: dict,
+        path: np.ndarray,
+        obstacles: typing.List,
+        road_network=None,
+        max_steering: float = np.pi / 4,
+        max_acceleration: float = 3.0,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Args:
+            observation: Environment observation dict with:
+                - position: (2,) array
+                - heading: (1,) array in radians
+                - velocity: (1,) array in m/s
+            path: Reference path waypoints as (N, 2) array
+            obstacles: List of obstacles from environment
+            road_network: Optional road network for boundary checking
+            max_steering: Maximum steering angle
+            max_acceleration: Maximum acceleration
+            
+        Returns:
+            action: [steering, acceleration] array
+        """
+        position = observation["position"]
+        heading = observation["heading"][0]
+        velocity = observation["velocity"][0]
+        
+        steering_angle = self._current_steering
+        
+        tentacles = self.generate_tentacles(
+            position=position,
+            heading=heading,
+            velocity=velocity,
+            steering_angle=steering_angle,
+        )
+        
+        navigable = self.classify_tentacles(
+            tentacles=tentacles,
+            obstacles=obstacles,
+            velocity=velocity,
+            road_network=road_network,
+        )
+        
+        if navigable:
+            tentacle_to_navigate = self.select_best_tentacle(
+                navigable_tentacles=navigable,
+                reference_path=path,
+                velocity=velocity,
+            )
+            emergency_braking = False
+        else:
+            tentacle_to_navigate = self.select_emergency_tentacle(tentacles)
+            emergency_braking = True
+        
+        if tentacle_to_navigate is not None:
+            steering = self.compute_steering_simple(
+                position=position,
+                heading=heading,
+                velocity=velocity,
+                tentacle=tentacle_to_navigate,
+            )
+        else:
+            steering = 0.0
+        
+        acceleration = self.compute_acceleration(
+            current_velocity=velocity,
+            has_navigable_path=len(navigable) > 0,
+            emergency_braking=emergency_braking,
+        )
+        
+        steering = np.clip(steering, -max_steering, max_steering)
+        acceleration = np.clip(acceleration, -max_acceleration, max_acceleration)
+        
+        # Convert acceleration to [0, 1] range
+        accel_normalized = acceleration / max_acceleration
+        accel_action = (accel_normalized + 1.0) / 2.0  # Convert [-1, 1] to [0, 1]
+        
+        return np.array([steering, accel_action, 0.0, 0.0], dtype=np.float32)
+    
+    def draw_debug(
+        self,
+        env,
+        observation: dict,
+        path: np.ndarray,
+    ) -> None:
+        """
+        Draw debug visualization on the environment.
+        
+        Shows:
+        - All tentacles (gray for non-navigable, light blue for navigable)
+        - Classification zones around tentacles
+        - Best tentacle (green, thicker)
+        - Scores for best tentacle
+        """
+        position = observation["position"]
+        velocity = observation["velocity"][0]
+        
+        # Colors
+        COLOR_NON_NAVIGABLE = (150, 150, 150)     # Gray
+        COLOR_NAVIGABLE = (100, 180, 255)         # Light blue
+        COLOR_BEST = (50, 255, 50)                # Green
+        COLOR_CLASSIFICATION = (255, 200, 100)   # Light orange
+        COLOR_EMERGENCY = (255, 100, 100)         # Red
+        COLOR_EXITS_ROAD = (255, 150, 0)          # Orange - exits road
+        
+        # Draw all tentacles
+        for tentacle in self.tentacles:
+            if tentacle is self.best_tentacle:
+                continue  # Draw best tentacle last
+            
+            # Color based on status
+            if tentacle.exits_road:
+                color = COLOR_EXITS_ROAD
+            elif tentacle.is_navigable:
+                color = COLOR_NAVIGABLE
+            else:
+                color = COLOR_NON_NAVIGABLE
+            width = 1
+            
+            # Draw tentacle path
+            if len(tentacle.points) >= 2:
+                env.overlay_manager.add_path(
+                    points=tentacle.points,
+                    color=color,
+                    width=width,
+                    closed=False,
+                )
+        
+        # Draw best tentacle with classification zone
+        if self.best_tentacle is not None:
+            tentacle = self.best_tentacle
+            
+            # Determine color based on whether we're in emergency mode
+            is_emergency = not tentacle.is_navigable
+            color = COLOR_EMERGENCY if is_emergency else COLOR_BEST
+            
+            # Draw classification zone as circles at key points
+            num_zone_circles = 8
+            step = max(1, len(tentacle.points) // num_zone_circles)
+            for i in range(0, len(tentacle.points), step):
+                point = tentacle.points[i]
+                env.overlay_manager.add_circle(
+                    center=tuple(point),
+                    radius=self.classification_radius,
+                    color=COLOR_CLASSIFICATION,
+                    width=1,
+                )
+            
+            # Draw the tentacle path (thicker)
+            if len(tentacle.points) >= 2:
+                env.overlay_manager.add_path(
+                    points=tentacle.points,
+                    color=color,
+                    width=3,
+                    closed=False,
+                )
+            
+            # Draw endpoint
+            end_point = tentacle.points[-1]
+            env.overlay_manager.add_circle(
+                center=tuple(end_point),
+                radius=0.5,
+                color=color,
+                width=0,
+            )
+            
+            # Draw collision distance marker
+            lc = self._compute_collision_distance(abs(velocity))
+            cumulative_dist = 0.0
+            for i in range(len(tentacle.points) - 1):
+                p1 = tentacle.points[i]
+                p2 = tentacle.points[i + 1]
+                segment_length = np.linalg.norm(p2 - p1)
+                cumulative_dist += segment_length
+                
+                if cumulative_dist >= lc:
+                    env.overlay_manager.add_circle(
+                        center=tuple(p2),
+                        radius=0.3,
+                        color=(255, 255, 0),  # Yellow
+                        width=0,
+                    )
+                    break
+            
+            # Draw score info near vehicle
+            score_text = (
+                f"Clear:{tentacle.clearance_score:.2f} "
+                f"Curv:{tentacle.curvature_score:.2f} "
+                f"Traj:{tentacle.trajectory_score:.2f}"
+            )
+            text_pos = (position[0] + 2, position[1] + 4)
+            env.overlay_manager.add_text(
+                position=text_pos,
+                text=score_text,
+                color=(0, 0, 0),
+                font_size=16,
+            )
+            
+            # Draw status text
+            if is_emergency:
+                status_text = "EMERGENCY BRAKING"
+                status_color = (255, 0, 0)
+            else:
+                status_text = f"Navigable: {len(self.navigable_tentacles)}/{len(self.tentacles)}"
+                status_color = (0, 100, 0)
+            
+            status_pos = (position[0] + 2, position[1] + 6)
+            env.overlay_manager.add_text(
+                position=status_pos,
+                text=status_text,
+                color=status_color,
+                font_size=16,
+            )
+        
+        # Draw tentacle count indicator
+        env.overlay_manager.add_text(
+            position=(position[0] + 2, position[1] + 2),
+            text=f"Tentacles: {len(self.tentacles)}",
+            color=(0, 0, 0),
+            font_size=16,
+        )
+</file>
+
+<file path="controllers/purepursuit.py">
+import numpy as np
+
+class PurePursuitController:
+    def __init__(
+        self,
+        lookahead_distance: float = 5.0,
+        wheelbase: float = 2.5,
+        target_velocity: float = 5.0,
+        kp_velocity: float = 1.0,
+    ):
+        self.lookahead_distance = lookahead_distance
+        self.wheelbase = wheelbase
+        self.target_velocity = target_velocity
+        self.kp_velocity = kp_velocity
+        
+    def find_lookahead_point(
+        self, 
+        position: np.ndarray, 
+        path: np.ndarray,
+        velocity: float
+    ) -> tuple[np.ndarray, int]:
+        """
+        Find the lookahead point on the path.
+        
+        Args:
+            position: Current vehicle position (x, y)
+            path: Path waypoints as (N, 2) array
+            velocity: Current velocity (for adaptive lookahead)
+            
+        Returns:
+            lookahead_point: The target point to steer towards
+            lookahead_idx: Index of the lookahead point in the path
+        """
+        car_to_waypoint_distances = np.linalg.norm(path - position, axis=1)
+        closest_idx = np.argmin(car_to_waypoint_distances)
+        
+        n_points = len(path)
+        cumulative_dist = 0.0
+        lookahead_idx = closest_idx
+        
+        for i in range(n_points):
+            idx = (closest_idx + i) % n_points
+            next_idx = (closest_idx + i + 1) % n_points
+            
+            segment_dist = np.linalg.norm(path[next_idx] - path[idx])
+            cumulative_dist += segment_dist
+            
+            if cumulative_dist >= self.lookahead_distance:
+                lookahead_idx = next_idx
+                break
+        
+        return path[lookahead_idx], lookahead_idx
+    
+    def compute_steering(
+        self,
+        position: np.ndarray,
+        heading: float,
+        lookahead_point: np.ndarray
+    ) -> float:
+        dx = lookahead_point[0] - position[0]
+        dy = lookahead_point[1] - position[1]
+        
+        distance_to_lookahead = np.sqrt(dx**2 + dy**2)
+        if distance_to_lookahead < 0.1:
+            return 0.0
+        
+        # Transform to vehicle coordinate frame
+        # Alpha is the angle between vehicle heading and lookahead point
+        lookahead_angle = np.arctan2(dy, dx)
+        alpha = lookahead_angle - heading
+        
+        # Normalize to [-pi, pi]
+        alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
+        
+        # delta = arctan(2 * L * sin(alpha) / distance_to_lookahead)
+        steering = np.arctan2(2.0 * self.wheelbase * np.sin(alpha), distance_to_lookahead)
+        
+        return steering
+    
+    def compute_acceleration(self, current_velocity: float) -> float:
+        """
+        Simple proportional velocity controller.
+        
+        Args:
+            current_velocity: Current vehicle velocity
+            
+        Returns:
+            acceleration: Acceleration command
+        """
+        velocity_error = self.target_velocity - current_velocity
+        return self.kp_velocity * velocity_error
+    
+    def get_action(
+        self,
+        observation: dict,
+        path: np.ndarray,
+        max_steering: float = np.pi / 4,
+        max_acceleration: float = 3.0,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Compute control action from observation.
+        
+        Args:
+            observation: Environment observation dict
+            path: Path waypoints as (N, 2) array
+            max_steering: Maximum steering angle (for clipping)
+            max_acceleration: Maximum acceleration (for clipping)
+            
+        Returns:
+            action: [steering, acceleration] array
+        """
+        position = observation["position"]
+        heading = observation["heading"][0]
+        velocity = observation["velocity"][0]
+        
+        lookahead_point, _ = self.find_lookahead_point(position, path, velocity)
+        
+        steering = self.compute_steering(position, heading, lookahead_point)
+        acceleration = self.compute_acceleration(velocity)
+        
+        steering = np.clip(steering, -max_steering, max_steering)
+        acceleration = np.clip(acceleration, 0.0, max_acceleration)
+        
+        # Throttle: 0 = no acceleration, 1 = full acceleration (CARLA-compatible)
+        throttle = acceleration / max_acceleration
+
+        return np.array([steering, throttle, 0.0, 0.0], dtype=np.float32)
+        
+    def draw_debug(
+        self,
+        env,
+        observation: dict,
+        path: np.ndarray,
+    ) -> None:
+        position = observation["position"]
+        velocity = observation["velocity"][0]
+        
+        lookahead_point, lookahead_idx = self.find_lookahead_point(
+            position, path, velocity
+        )
+        
+        env.overlay_manager.add_circle(
+            center=tuple(lookahead_point),
+            radius=0.5,
+            color=(255, 165, 0),
+            width=0,
+        )
+        
+        env.overlay_manager.add_line(
+            start=tuple(position),
+            end=tuple(lookahead_point),
+            color=(255, 165, 0),
+            width=2,
+        )
+</file>
+
+<file path="environments/bicycle/environment.py">
+import typing
+import gymnasium
+
+import numpy as np
+
+from .components.obstacles import *
+
+from .components.roads import *
+
+from .components.renderer import Renderer
+from .components.overlay import OverlayManager
+from .components.performance import PerformanceTracker
+
+class BicycleCarEnv(gymnasium.Env):
+    """
+    A bicycle kinematic model environment with proper meter-based scaling.
+
+    All dimensions are in meters, velocities in m/s.
+    """
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
+
+    # in meters
+    CAR_LENGTH = 4.5
+    CAR_WIDTH = 1.8
+    WORLD_PADDING = 10.0
+    
+    # meters, m/s, m/s^2
+    WHEELBASE = 2.5
+    MAX_STEERING = np.pi / 4
+    MAX_VELOCITY = 15.0  # ~54 km/h
+    MAX_ACCELERATION = 3.0
+    MAX_BRAKE_DECELERATION = 6.0  # ~0.6g braking
+    
+    SCREEN_SIZE = (800, 800)
+    
+    def __init__(
+        self,
+        render_mode: typing.Literal["human", "rgb_array"] | None = None,
+        # (position (x, y), heading in radians)
+        spawn: typing.Tuple[typing.Tuple[float, float], float] = ((10.0, 10.0), 0.0),
+        # (position (x, y), radius in meters)
+        goal: typing.Tuple[typing.Tuple[float, float], float] = ((90.0, 90.0), 3.0),
+        obstacles: typing.List[typing.Union[Circle, Rectangle]] | None = None,
+        road_network: RoadNetwork | None = None,
+        # TODO: enforce road should be encoded in the road network itself not here
+        enforce_road: bool = False,
+        solid_road_borders: bool = False,
+        
+        # Simulation
+        dt: float = 0.1,
+    ):
+        super().__init__()
+
+        self.spawn_pos, self.spawn_heading = np.array(spawn[0], dtype=np.float32), spawn[1]
+
+        self.goal_pos, self.goal_radius = goal
+        
+        self.dt = dt
+
+        self.obstacles = obstacles if obstacles else []
+        self.road_network = road_network
+        self.enforce_road = enforce_road
+        self.solid_road_borders = solid_road_borders
+
+        self.world_size, self.world_origin = self._calculate_world_bounds()
+        self.world_size = np.array((100, 100))
+        self.render_mode = render_mode
+
+        margin_x, margin_y = 40, 40
+        scale_x = (BicycleCarEnv.SCREEN_SIZE[0] - margin_x) / self.world_size[0]
+        scale_y = (BicycleCarEnv.SCREEN_SIZE[1] - margin_y) / self.world_size[1]
+        self.pixels_per_meter = min(scale_x, scale_y)
+
+        # [steering, throttle, brake, reverse]
+        self.action_space = gymnasium.spaces.Box(
+            low=np.array([-BicycleCarEnv.MAX_STEERING, 0.0, 0.0, 0.0], dtype=np.float32),
+            high=np.array([BicycleCarEnv.MAX_STEERING, 1.0, 1.0, 1.0], dtype=np.float32),
+            dtype=np.float32,
+        )
+
+        self.observation_space = gymnasium.spaces.Dict(
+            {
+                "position": gymnasium.spaces.Box(
+                    -np.inf, np.inf, shape=(2,), dtype=np.float32
+                ),
+                "heading": gymnasium.spaces.Box(
+                    -np.pi, np.pi, shape=(1,), dtype=np.float32
+                ),
+                "velocity": gymnasium.spaces.Box(
+                    -BicycleCarEnv.MAX_VELOCITY, BicycleCarEnv.MAX_VELOCITY, shape=(1,), dtype=np.float32
+                ),
+            }
+        )
+
+        self.state = None
+        
+        self.global_path = None  # Will store waypoints as (N, 2) array
+        self._compute_global_path()
+
+        self._episode_data = {
+            'actions': [],
+            'positions': [],
+            'steering_angles': [],
+            'velocities': [],
+            'headings': [],
+            'terminated': False,
+            'truncated': False
+        }
+
+        self.overlay_manager = OverlayManager()
+        self.performance_tracker = PerformanceTracker(show_performance=True)
+        self.renderer = Renderer(
+            screen_size=BicycleCarEnv.SCREEN_SIZE,
+            render_mode=render_mode,
+            render_fps=self.metadata["render_fps"],
+        )
+        
+        self.simulation_time = 0.0
+
+    def _calculate_world_bounds(self) -> typing.Tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate world bounds based on all content.
+
+        Returns:
+            world_size:
+                (width, height) in meters
+            world_origin:
+                (min_x, min_y)
+                Bottom left corner of the rectangular area of the world that will be displayed on screen.
+                Everything outside that rectangle gets clipped (not rendered).
+        """
+        min_x, min_y = float("inf"), float("inf")
+        max_x, max_y = float("-inf"), float("-inf")
+        
+        # spawn position
+        min_x, min_y = min(min_x, self.spawn_pos[0]), min(min_y, self.spawn_pos[1])
+        max_x, max_y = max(max_x, self.spawn_pos[0]), max(max_y, self.spawn_pos[1])
+
+        # goal position
+        min_x, min_y = min(min_x, self.goal_pos[0] - self.goal_radius), min(min_y, self.goal_pos[1] - self.goal_radius)
+        max_x, max_y = max(max_x, self.goal_pos[0] + self.goal_radius), max(max_y, self.goal_pos[1] + self.goal_radius)
+
+        # obstacles
+        for obstacle in self.obstacles:
+            bounds = obstacle.get_bounds()
+            
+            min_x, min_y = min(min_x, bounds[0]), min(min_y, bounds[1])
+            max_x, max_y = max(max_x, bounds[2]), max(max_y, bounds[3])
+
+        # roads
+        if self.road_network is not None:
+            bounds = self.road_network.get_bounds()
+            min_x, min_y = min(min_x, bounds[0]), min(min_y, bounds[1])
+            max_x, max_y = max(max_x, bounds[2]), max(max_y, bounds[3])
+
+        # padding
+        min_x, min_y = min_x - BicycleCarEnv.WORLD_PADDING, min_y - BicycleCarEnv.WORLD_PADDING
+        max_x, max_y = max_x + BicycleCarEnv.WORLD_PADDING, max_y + BicycleCarEnv.WORLD_PADDING
+
+        world_size = np.array([max_x - min_x, max_y - min_y], dtype=np.float32)
+        world_origin = np.array([min_x, min_y], dtype=np.float32)
+
+        return world_size, world_origin
+
+    def _world_to_screen(self, position: typing.Union[np.ndarray, typing.Tuple[float, float]]) -> typing.Tuple[int, int]:
+        """
+        Convert world coordinates (meters) to screen coordinates (pixels).
+        Position P (100, 100) in the world isn't (100, 100) in the screen.
+        The screen maps an area of the world determined by world_origin. If it is (90, 90).
+        To get position of P in screen, we do `local_position = (100, 100) - (90, 90) = (10, 10).
+        """
+        if isinstance(position, tuple):
+            position = np.array(position, dtype=np.float32)
+
+        local_position = position - self.world_origin
+
+        screen_x = int(local_position[0] * self.pixels_per_meter) + 20
+        screen_y = int(
+            BicycleCarEnv.SCREEN_SIZE[1] - local_position[1] * self.pixels_per_meter - 20
+        )
+
+        return (screen_x, screen_y)
+
+    def _meters_to_pixels(self, meters: float) -> int:
+        return max(1, int(meters * self.pixels_per_meter))
+
+    def _compute_global_path(self) -> None:
+        """
+        Compute a closed-loop global path following the road centerline.
+        
+        The path starts at spawn, follows the entire road loop in the road's
+        direction, and returns to the spawn point. This is ideal for track-based
+        scenarios where the vehicle navigates the full circuit.
+        """
+        if self.road_network is None:
+            # Simple straight line from spawn to goal
+            self.global_path = np.array([self.spawn_pos, self.goal_pos], dtype=np.float32)
+            return
+        
+        # Extract all centerline points from the road network (preserving order)
+        all_centerline_points = []
+        
+        for road in self.road_network.roads:
+            for segment in road.segments:
+                # Use more points for smoother paths (increased density for better controller performance)
+                num_points = max(256, int(segment.get_length() * 5))
+                centerline = segment.get_centerline_points(num_points)
+                all_centerline_points.extend(centerline)
+        
+        if not all_centerline_points:
+            # Fallback to straight line
+            self.global_path = np.array([self.spawn_pos, self.goal_pos], dtype=np.float32)
+            return
+        
+        centerline_array = np.array(all_centerline_points, dtype=np.float32)
+        
+        # Find the closest point on centerline to spawn
+        spawn_distances = np.linalg.norm(centerline_array - self.spawn_pos, axis=1)
+        spawn_idx = np.argmin(spawn_distances)
+        
+        # Reorder the path to start from spawn_idx and wrap around
+        # This creates a full loop starting and ending near spawn
+        n_points = len(centerline_array)
+        reordered_indices = [(spawn_idx + i) % n_points for i in range(n_points)]
+        reordered_path = centerline_array[reordered_indices]
+        
+        # Build the final path with spawn at start
+        path_points = [self.spawn_pos.copy()]
+        
+        for point in reordered_path:
+            # Only add if not too close to the previous point (avoid duplication)
+            # Reduced threshold for denser path
+            if np.linalg.norm(point - path_points[-1]) > 0.2:
+                path_points.append(point)
+        
+        # Close the loop - return to spawn
+        if np.linalg.norm(self.spawn_pos - path_points[-1]) > 0.2:
+            path_points.append(self.spawn_pos.copy())
+        
+        self.global_path = np.array(path_points, dtype=np.float32)
+        self.global_path_is_loop = True  # Flag to indicate this is a closed loop
+
+    def reset(self, seed: int | None = None) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
+        super().reset(seed=seed)
+
+        self.state = np.array(
+            [
+                self.spawn_pos[0],
+                self.spawn_pos[1],
+                self.spawn_heading,
+                0.0,
+            ],
+            dtype=np.float32,
+        )
+        
+        self.simulation_time = 0.0
+        for obstacle in self.obstacles:
+            obstacle.reset()
+        
+        self.performance_tracker.reset()
+
+        self._episode_data['actions'] = []
+        self._episode_data['positions'] = []
+        self._episode_data['steering_angles'] = []
+        self._episode_data['velocities'] = []
+        self._episode_data['headings'] = []
+        self._episode_data['terminated'] = False
+        self._episode_data['truncated'] = False
+
+        observation = self._get_observation()
+        info = None
+
+        if self.render_mode == "human":
+            self._render_frame()
+
+        return observation, info
+
+    def step(
+        self,
+        action: np.ndarray
+    ) -> typing.Tuple[
+        dict[str, typing.Any], float, bool, bool, dict[str, typing.Any]
+    ]:
+        assert len(action) == 4, "Action must be of the form [steering, throttle, brake, reverse]"
+        
+        self._episode_data['positions'].append(self.state[:2].copy())
+        self._episode_data['velocities'].append(float(self.state[3]))
+        self._episode_data['headings'].append(float(self.state[2]))
+        self._episode_data['actions'].append(action.copy())
+        self._episode_data['steering_angles'].append(float(action[0]))
+        
+        steering = np.clip(action[0], -BicycleCarEnv.MAX_STEERING, BicycleCarEnv.MAX_STEERING)
+        throttle = np.clip(action[1], 0.0, 1.0)
+        brake = np.clip(action[2], 0.0, 1.0)
+        reverse = (action[3] != 0.0)
+        
+        direction = -1 if reverse else 1
+        acceleration = direction * throttle * BicycleCarEnv.MAX_ACCELERATION
+
+        x, y, theta, v = self.state
+
+        x_new = x + v * np.cos(theta) * self.dt
+        y_new = y + v * np.sin(theta) * self.dt
+        theta_new = theta + (v / BicycleCarEnv.WHEELBASE) * np.tan(steering) * self.dt
+        v_new = v + acceleration * self.dt
+        
+        if brake > 0.0 and abs(v_new) > 0.01:
+            brake_decel = brake * BicycleCarEnv.MAX_BRAKE_DECELERATION * self.dt
+            if v_new > 0:
+                v_new = max(0.0, v_new - brake_decel)
+            else:
+                v_new = min(0.0, v_new + brake_decel)
+        
+        v_new = np.clip(v_new, -BicycleCarEnv.MAX_VELOCITY, BicycleCarEnv.MAX_VELOCITY)
+
+        theta_new = np.arctan2(np.sin(theta_new), np.cos(theta_new))
+
+        self.state = np.array([x_new, y_new, theta_new, v_new], dtype=np.float32)
+        
+        self.simulation_time += self.dt
+        
+        for obstacle in self.obstacles:
+            obstacle.update(self.simulation_time)
+        
+        self.performance_tracker.update()
+
+        observation = self._get_observation()
+        info = None
+        
+        terminated = False
+        truncated = False
+        reward = 0.0
+        
+        goal_dist = np.linalg.norm(self.state[:2] - self.goal_pos)
+        if goal_dist <= self.goal_radius:
+            terminated = True
+        elif self._check_collision():
+            terminated = True
+        elif not self._within_world_boundaries():
+            truncated = True
+        elif self.road_network is not None:
+            if self.road_network.is_off_road(self.state[:2]):
+                if self.enforce_road:
+                    terminated = True
+        
+        self._episode_data['terminated'] = terminated
+        self._episode_data['truncated'] = truncated
+
+        if self.render_mode == "human":
+            self._render_frame()
+
+        return observation, reward, terminated, truncated, info
+
+    def _get_observation(self) -> dict[str, typing.Any]:
+        return {
+            "position": self.state[:2].copy(),
+            "heading": np.array([self.state[2]], dtype=np.float32),
+            "velocity": np.array([self.state[3]], dtype=np.float32),
+        }
+        
+    def _get_car_corners(self) -> np.ndarray:
+        x, y, theta, _ = self.state
+        half_length = BicycleCarEnv.CAR_LENGTH / 2
+        half_width = BicycleCarEnv.CAR_WIDTH / 2
+        
+        corners_local = np.array([
+            # front-right
+            [half_length, -half_width],
+            # front-left
+            [half_length, half_width],
+            # rear-left
+            [-half_length, half_width],
+            # rear-right
+            [-half_length, -half_width],
+        ])
+        
+        c, s = np.cos(theta), np.sin(theta)
+        rot = np.array([[c, -s], [s, c]])
+        
+        position = np.array([x, y])
+        corners_world = np.array([position + rot @ corner for corner in corners_local])
+        
+        return corners_world
+    
+    def _check_collision(self) -> bool:
+        corners = self._get_car_corners()
+        
+        # corners vs obstacles
+        for corner in corners:
+            for obs in self.obstacles:
+                if obs.check_collision(corner):
+                    return True
+        
+        # edges' midpoints vs obstacles
+        for i in range(4):
+            midpoint = (corners[i] + corners[(i + 1) % 4]) / 2
+            for obs in self.obstacles:
+                if obs.check_collision(midpoint):
+                    return True
+        
+        # center point vs obstacles
+        center = self.state[:2]
+        for obs in self.obstacles:
+            if obs.check_collision(center):
+                return True
+        
+        if self.solid_road_borders and self.road_network is not None:
+            # corners vs off-road
+            for corner in corners:
+                if self.road_network.is_off_road(corner):
+                    return True
+            # edges' midpoints vs off-road
+            for i in range(4):
+                midpoint = (corners[i] + corners[(i + 1) % 4]) / 2
+                if self.road_network.is_off_road(midpoint):
+                    return True
+            # center point vs off-road
+            if self.road_network.is_off_road(center):
+                return True
+        
+        return False
+
+    def _within_world_boundaries(self) -> bool:
+        """
+        Checks whether the vehicle is withing the rectangular area defined by `world_origin`
+        and `world_size`. This area includes everything that could be rendered (spawn, goal, obstacles, etc).
+        """
+        x, y = self.state[:2]
+        min_x, min_y = self.world_origin
+        max_x, max_y = min_x + self.world_size[0], min_y + self.world_size[1]
+        return min_x <= x <= max_x and min_y <= y <= max_y
+
+    def render(self) -> np.ndarray | None:
+        if self.render_mode == "rgb_array":
+            return self._render_frame()
+        return None
+    
+    def _render_frame(self) -> np.ndarray | None:
+	    return self.renderer.render_frame(self)
+        
+    def get_episode_data(self) -> dict[str, typing.Any]:
+        return {
+            **self._episode_data,
+        }
+
+    def close(self) -> None:
+        self.renderer.close()
+</file>
 
 </files>
