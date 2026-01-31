@@ -1,0 +1,1 @@
+from .obstacles import *
