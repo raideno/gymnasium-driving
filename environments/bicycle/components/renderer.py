@@ -102,7 +102,7 @@ class Renderer:
     def _draw_roads(self, env) -> None:
         # First pass: draw all road surfaces (polygons)
         for road in env.road_network.roads:
-            half_width = road.lane_config.half_width
+            half_width = road.half_width
             
             for segment in road.segments:
                 num_points = max(20, int(segment.get_length() * 2))
@@ -115,60 +115,20 @@ class Renderer:
                 if len(polygon_points) >= 3:
                     pygame.draw.polygon(self.screen, constants.gray, polygon_points)
         
-        # Second pass: draw boundary lines and center lines
+        # Second pass: draw boundary lines
         for road in env.road_network.roads:
-            half_width = road.lane_config.half_width
-            num_lanes = road.lane_config.num_lanes
-            total_length = road.get_total_length()
+            half_width = road.half_width
             
-            # Calculate trim amounts in terms of fraction of total length
-            start_trim_frac = road.start_trim / total_length if total_length > 0 else 0
-            end_trim_frac = road.end_trim / total_length if total_length > 0 else 0
-            
-            for seg_idx, segment in enumerate(road.segments):
-                seg_length = segment.get_length()
-                num_points = max(20, int(seg_length * 2))
+            for segment in road.segments:
+                num_points = max(20, int(segment.get_length() * 2))
                 left, right = segment.get_boundary_points(half_width, num_points)
                 
-                # Calculate which points to trim for this segment
-                is_first_segment = seg_idx == 0
-                is_last_segment = seg_idx == len(road.segments) - 1
-                
-                # Trim start of first segment
-                start_idx = 0
-                if is_first_segment and road.start_trim > 0:
-                    trim_points = int(road.start_trim / seg_length * num_points)
-                    start_idx = min(trim_points, num_points - 2)
-                
-                # Trim end of last segment
-                end_idx = num_points
-                if is_last_segment and road.end_trim > 0:
-                    trim_points = int(road.end_trim / seg_length * num_points)
-                    end_idx = max(num_points - trim_points, start_idx + 2)
-                
-                # Get trimmed boundary points
-                left_trimmed = left[start_idx:end_idx]
-                right_trimmed = right[start_idx:end_idx]
-                
-                left_screen = [env._world_to_screen(p) for p in left_trimmed]
-                right_screen = [env._world_to_screen(p) for p in right_trimmed]
+                left_screen = [env._world_to_screen(p) for p in left]
+                right_screen = [env._world_to_screen(p) for p in right]
                 
                 if len(left_screen) >= 2:
                     pygame.draw.lines(self.screen, constants.dark_gray, False, left_screen, 3)
                     pygame.draw.lines(self.screen, constants.dark_gray, False, right_screen, 3)
-                
-                centerline = segment.get_centerline_points(num_points)
-                if num_lanes > 1:
-                    center_screen = [env._world_to_screen(p) for p in centerline]
-                    for i in range(0, len(center_screen) - 1, 4):
-                        end_idx = min(i + 2, len(center_screen) - 1)
-                        pygame.draw.line(
-                            self.screen,
-                            constants.yellow,
-                            center_screen[i],
-                            center_screen[end_idx],
-                            2,
-                        )
     
     def _draw_global_path(self, env) -> None:
         global_path = env.path
