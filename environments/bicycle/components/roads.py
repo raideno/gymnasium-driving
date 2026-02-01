@@ -1,5 +1,3 @@
-# roads/index.py
-
 import abc
 import enum
 import typing
@@ -661,3 +659,107 @@ class RoadNetwork:
             "in_multiple_lanes": in_multiple_lanes,
             "relative_heading": relative_heading,
         }
+
+def create_oval_track(
+    center: typing.Tuple[float, float],
+    straight_length: float,
+    turn_radius: float,
+    lane_config: LaneConfig = DOUBLE_LANE,
+) -> Road:
+    start_x = center[0] - straight_length / 2
+    start_y = center[1] - turn_radius
+    return (
+        RoadBuilder((start_x, start_y), 0.0, lane_config)
+        .straight(straight_length)
+        .turn_left(turn_radius, 180)
+        .straight(straight_length)
+        .turn_left(turn_radius, 180)
+        .build()
+    )
+
+def create_figure_eight(
+    center: typing.Tuple[float, float],
+    radius: float,
+    lane_config: LaneConfig = DOUBLE_LANE,
+) -> Road:
+    start_x = center[0]
+    start_y = center[1]
+    return (
+        RoadBuilder((start_x, start_y), np.pi / 2, lane_config)
+        .turn_left(radius, 360)
+        .turn_right(radius, 360)
+        .build()
+    )
+
+def lane_config_from_width(total_width: float, num_lanes: int = 2) -> LaneConfig:
+    return LaneConfig(num_lanes=num_lanes, lane_width=total_width / num_lanes)
+
+def create_rectangular_track(
+    center: typing.Tuple[float, float],
+    length: float,
+    width: float,
+    turn_radius: float,
+    lane_config: LaneConfig = DOUBLE_LANE,
+    start_corner: str = "bottom_left",
+) -> Road:
+    """
+    Create a rectangular track (closed loop).
+
+    The track has 4 straight segments connected by 90-degree turns.
+
+    Args:
+        center: Center of the rectangle (x, y) in meters
+        length: Length of the long sides in meters
+        width: Length of the short sides in meters
+        turn_radius: Radius of the corner turns in meters
+        lane_config: Lane configuration for the road
+        start_corner: Which corner to start from
+            ("bottom_left", "bottom_right", "top_right", "top_left")
+
+    Returns:
+        A Road forming a rectangular loop
+    """
+    # adjust straight lengths to account for turn radii, the turns eat into the rectangle dimensions
+    straight_long = length - 2 * turn_radius
+    straight_short = width - 2 * turn_radius
+
+    if straight_long <= 0 or straight_short <= 0:
+        raise ValueError(
+            f"Turn radius {turn_radius}m is too large for rectangle "
+            f"{length}m x {width}m. Max turn radius: "
+            f"{min(length, width) / 2}m"
+        )
+
+    # calculate starting position based on corner
+    half_length = length / 2
+    half_width = width / 2
+    cx, cy = center
+
+    if start_corner == "bottom_left":
+        start_x = cx - half_length + turn_radius
+        start_y = cy - half_width
+        start_heading = 0.0  # pointing right
+    elif start_corner == "bottom_right":
+        start_x = cx + half_length
+        start_y = cy - half_width + turn_radius
+        start_heading = np.pi / 2  # pointing up
+    elif start_corner == "top_right":
+        start_x = cx + half_length - turn_radius
+        start_y = cy + half_width
+        start_heading = np.pi  # pointing left
+    elif start_corner == "top_left":
+        start_x = cx - half_length
+        start_y = cy + half_width - turn_radius
+        start_heading = -np.pi / 2  # pointing down
+    else:
+        raise ValueError(f"Unknown start_corner: {start_corner}")
+
+    builder = RoadBuilder((start_x, start_y), start_heading, lane_config)
+    for i in range(4):
+        if i % 2 == 0:
+            builder.straight(straight_long)
+        else:
+            builder.straight(straight_short)
+        builder.turn_left(turn_radius, 90)
+
+    return builder.build()

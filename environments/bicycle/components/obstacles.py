@@ -43,6 +43,9 @@ def waypoints(
     speed: float, 
     loop: bool = True
 ) -> MotionFn:
+    """
+    Move along a series of waypoints at a constant speed.
+    """
     def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
         if len(points) == 0:
             return init

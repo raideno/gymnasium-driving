@@ -3,10 +3,6 @@ import typing
 import pygame
 
 class PerformanceTracker:
-    """
-    Tracks and displays performance metrics like FPS, simulation time, and step count.
-    """
-    
     def __init__(self, show_performance: bool = True):
         self._start_time: float | None = None
         self._last_step_time: float | None = None

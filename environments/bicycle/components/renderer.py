@@ -75,6 +75,7 @@ class Renderer:
         )
     
     def _draw_grid(self, env) -> None:
+        # TODO: externalize
         grid_spacing = 10.0  # meters
         grid_color = (200, 200, 200)
         
@@ -82,7 +83,7 @@ class Renderer:
         max_x = min_x + env.world_size[0]
         max_y = min_y + env.world_size[1]
         
-        # Vertical grid lines
+        # vertical grid lines
         x = np.ceil(min_x / grid_spacing) * grid_spacing
         while x <= max_x:
             start = env._world_to_screen((x, min_y))
@@ -90,7 +91,7 @@ class Renderer:
             pygame.draw.line(self.screen, grid_color, start, end, 1)
             x += grid_spacing
         
-        # Horizontal grid lines
+        # horizontal grid lines
         y = np.ceil(min_y / grid_spacing) * grid_spacing
         while y <= max_y:
             start = env._world_to_screen((min_x, y))
@@ -99,7 +100,6 @@ class Renderer:
             y += grid_spacing
     
     def _draw_roads(self, env) -> None:
-        """Draw road network."""
         # First pass: draw all road surfaces (polygons)
         for road in env.road_network.roads:
             half_width = road.lane_config.half_width
@@ -171,17 +171,14 @@ class Renderer:
                         )
     
     def _draw_global_path(self, env) -> None:
-        """Draw global path."""
         global_path = env.path
         path_screen = [env._world_to_screen(p) for p in global_path]
-        # Draw path line (closed loop if it's a circular path)
-        is_loop = True  # Assume loop by default
+        
+        is_loop = True  # Draw path line (closed loop if it's a circular path), assume loop by default
         pygame.draw.lines(self.screen, (150, 100, 200), is_loop, path_screen, 2)
-        # Draw waypoints as small circles (only every few points for cleaner look)
-        step = max(1, len(path_screen) // 128)  # Show ~30 waypoint markers max
-        for i in range(0, len(path_screen), step):
+        
+        for i in range(0, len(path_screen), max(1, len(path_screen) // 128)):
             point = path_screen[i]
-            # Color start point constants.green, others purple
             if i == 0:
                 color = (100, 200, 100)
                 radius = 6
@@ -251,13 +248,11 @@ class Renderer:
         pygame.draw.polygon(self.screen, (100, 100, 220), front_points)
     
     def _draw_spawn(self, env) -> None:
-        """Draw spawn marker."""
         spawn_screen = env._world_to_screen(env.spawn_pos)
         pygame.draw.circle(self.screen, constants.black, spawn_screen, 5)
         pygame.draw.circle(self.screen, constants.white, spawn_screen, 3)
     
     def _draw_scale_indicator(self, env) -> None:
-        """Draw a scale bar showing real-world distance."""
         # Draw a 10-meter scale bar in the bottom-right corner
         scale_length_m = 10.0
         scale_length_px = env._meters_to_pixels(scale_length_m)
@@ -292,7 +287,6 @@ class Renderer:
         self.screen.blit(text, text_rect)
     
     def _draw_info_text(self, env) -> None:
-        """Draw current state information."""
         state = env.state
         if state is None:
             return

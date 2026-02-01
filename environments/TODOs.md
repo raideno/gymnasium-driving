@@ -1,3 +1,23 @@
+# Road Todos
+
+- [ ] Simplify the road implementation by using a graph based definition. The renderer will then draw everything correctly.
+- [ ] Implement the observation wrappers.
+- [ ] Implement some action "discretizer" wrappers.
+- [ ] Implement some reward wrappers.
+
+Checkout https://github.com/danielriege/tinycarlo/tree/main/mapbuilder which is an alternative that is pretty well made. It might be of interest.
+
+So the idea is to define the road as a graph:
+- Each node will have a position.
+- Edges connecting the nodes will have some data to encode:
+  - Road length.
+  - Type of connection: straight line, arc, merge, etc.
+  - Number of lanes
+
+But this might be too much, so I think we'll stick to our current roads for now and teach the networks to behave on them instead.
+
+---
+
 - [x] Have all the dimensions be to scale, replicate parking lot, renault zoe dimensions, etc.
 - [ ] Implement some control algorithms.
   - [ ] Rule based.

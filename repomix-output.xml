@@ -1,10 +1,10 @@
-This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
 
 <file_summary>
 This section contains a summary of this file.
 
 <purpose>
-This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+This file contains a packed representation of the entire repository's contents.
 It is designed to be easily consumable by AI systems for analysis, code review,
 or other automated processes.
 </purpose>
@@ -32,7 +32,6 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Files matching these patterns are excluded: *.ipynb, */**/*predefined.py
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -48,15 +47,17 @@ controllers/
 environments/
   bicycle/
     components/
-      roads/
-        __init__.py
-        index.py
       __init__.py
       constants.py
       obstacles.py
       overlay.py
       performance.py
       renderer.py
+      roads.py
+    wrappers/
+      observations/
+        with_obstacles_info.py
+        with_road_info.py
     __init__.py
     environment.py
   TODOs.md
@@ -67,6 +68,7 @@ metrics/
   success_rate.py
 .gitignore
 helpers.py
+index.ipynb
 index.py
 questions.md
 README.md
@@ -75,14 +77,7 @@ README.md
 <files>
 This section contains the contents of the repository's files.
 
-<file path="environments/bicycle/components/roads/__init__.py">
-from .index import *
-from .predefined import *
-</file>
-
-<file path="environments/bicycle/components/roads/index.py">
-# roads/index.py
-
+<file path="environments/bicycle/components/roads.py">
 import abc
 import enum
 import typing
@@ -744,6 +739,132 @@ class RoadNetwork:
             "in_multiple_lanes": in_multiple_lanes,
             "relative_heading": relative_heading,
         }
+
+def create_oval_track(
+    center: typing.Tuple[float, float],
+    straight_length: float,
+    turn_radius: float,
+    lane_config: LaneConfig = DOUBLE_LANE,
+) -> Road:
+    start_x = center[0] - straight_length / 2
+    start_y = center[1] - turn_radius
+    return (
+        RoadBuilder((start_x, start_y), 0.0, lane_config)
+        .straight(straight_length)
+        .turn_left(turn_radius, 180)
+        .straight(straight_length)
+        .turn_left(turn_radius, 180)
+        .build()
+    )
+
+def create_figure_eight(
+    center: typing.Tuple[float, float],
+    radius: float,
+    lane_config: LaneConfig = DOUBLE_LANE,
+) -> Road:
+    start_x = center[0]
+    start_y = center[1]
+    return (
+        RoadBuilder((start_x, start_y), np.pi / 2, lane_config)
+        .turn_left(radius, 360)
+        .turn_right(radius, 360)
+        .build()
+    )
+
+def lane_config_from_width(total_width: float, num_lanes: int = 2) -> LaneConfig:
+    return LaneConfig(num_lanes=num_lanes, lane_width=total_width / num_lanes)
+
+def create_rectangular_track(
+    center: typing.Tuple[float, float],
+    length: float,
+    width: float,
+    turn_radius: float,
+    lane_config: LaneConfig = DOUBLE_LANE,
+    start_corner: str = "bottom_left",
+) -> Road:
+    """
+    Create a rectangular track (closed loop).
+
+    The track has 4 straight segments connected by 90-degree turns.
+
+    Args:
+        center: Center of the rectangle (x, y) in meters
+        length: Length of the long sides in meters
+        width: Length of the short sides in meters
+        turn_radius: Radius of the corner turns in meters
+        lane_config: Lane configuration for the road
+        start_corner: Which corner to start from
+            ("bottom_left", "bottom_right", "top_right", "top_left")
+
+    Returns:
+        A Road forming a rectangular loop
+    """
+    # adjust straight lengths to account for turn radii, the turns eat into the rectangle dimensions
+    straight_long = length - 2 * turn_radius
+    straight_short = width - 2 * turn_radius
+
+    if straight_long <= 0 or straight_short <= 0:
+        raise ValueError(
+            f"Turn radius {turn_radius}m is too large for rectangle "
+            f"{length}m x {width}m. Max turn radius: "
+            f"{min(length, width) / 2}m"
+        )
+
+    # calculate starting position based on corner
+    half_length = length / 2
+    half_width = width / 2
+    cx, cy = center
+
+    if start_corner == "bottom_left":
+        start_x = cx - half_length + turn_radius
+        start_y = cy - half_width
+        start_heading = 0.0  # pointing right
+    elif start_corner == "bottom_right":
+        start_x = cx + half_length
+        start_y = cy - half_width + turn_radius
+        start_heading = np.pi / 2  # pointing up
+    elif start_corner == "top_right":
+        start_x = cx + half_length - turn_radius
+        start_y = cy + half_width
+        start_heading = np.pi  # pointing left
+    elif start_corner == "top_left":
+        start_x = cx - half_length
+        start_y = cy + half_width - turn_radius
+        start_heading = -np.pi / 2  # pointing down
+    else:
+        raise ValueError(f"Unknown start_corner: {start_corner}")
+
+    builder = RoadBuilder((start_x, start_y), start_heading, lane_config)
+    for i in range(4):
+        if i % 2 == 0:
+            builder.straight(straight_long)
+        else:
+            builder.straight(straight_short)
+        builder.turn_left(turn_radius, 90)
+
+    return builder.build()
+</file>
+
+<file path="environments/bicycle/wrappers/observations/with_obstacles_info.py">
+import gymnasium
+
+class WithObstaclesInfo(gymnasium.ObservationWrapper):
+    def __init__(self, env: gymnasium.Env):
+        super().__init__(env)
+        
+    def observation(self, observation: dict) -> dict:
+        pass
+</file>
+
+<file path="environments/bicycle/wrappers/observations/with_road_info.py">
+import gymnasium
+
+class WithRoadInfo(gymnasium.ObservationWrapper):
+    def __init__(self, env: gymnasium.Env):
+        super().__init__(env)
+        
+    def observation(self, observation: dict) -> dict:
+        pass
 </file>
 
 <file path="environments/bicycle/components/__init__.py">
@@ -808,6 +929,9 @@ def waypoints(
     speed: float, 
     loop: bool = True
 ) -> MotionFn:
+    """
+    Move along a series of waypoints at a constant speed.
+    """
     def motion(t: float, init: typing.Tuple[float, float]) -> typing.Tuple[float, float]:
         if len(points) == 0:
             return init
@@ -1134,10 +1258,6 @@ import typing
 import pygame
 
 class PerformanceTracker:
-    """
-    Tracks and displays performance metrics like FPS, simulation time, and step count.
-    """
-    
     def __init__(self, show_performance: bool = True):
         self._start_time: float | None = None
         self._last_step_time: float | None = None
@@ -1211,330 +1331,6 @@ class PerformanceTracker:
     
     def show_performance(self, show: bool = True) -> None:
         self._show_performance = show
-</file>
-
-<file path="environments/bicycle/components/renderer.py">
-import typing
-import pygame
-
-import numpy as np
-
-import environments.bicycle.components.constants as constants
-
-class Renderer:
-    def __init__(
-        self,
-        screen_size: typing.Tuple[int, int],
-        render_mode: str | None,
-        render_fps: int = 30,
-    ):
-        self.screen_size = screen_size
-        self.render_mode = render_mode
-        self.render_fps = render_fps
-        
-        self.screen: pygame.Surface | None = None
-        self.clock: pygame.time.Clock | None = None
-    
-    def initialize(self) -> None:
-        if self.screen is None:
-            pygame.init()
-            if self.render_mode == "human":
-                pygame.display.init()
-                self.screen = pygame.display.set_mode(self.screen_size)
-                pygame.display.set_caption("Bicycle Car Environment")
-            else:
-                self.screen = pygame.Surface(self.screen_size)
-            self.clock = pygame.time.Clock()
-    
-    def render_frame(self, env) -> np.ndarray | None:
-        """
-        Returns:
-            RGB array if render_mode is "rgb_array", None otherwise
-        """
-        self.initialize()
-        
-        self.screen.fill(constants.light_gray)
-        
-        self._draw_grid(env)
-        
-        if env.road_network is not None:
-            self._draw_roads(env)
-        
-        if env.global_path is not None and len(env.global_path) > 1:
-            self._draw_global_path(env)
-        
-        self._draw_obstacles(env)
-        
-        self._draw_goal(env)
-        
-        if env.state is not None:
-            self._draw_car(env)
-        
-        self._draw_spawn(env)
-        
-        self._draw_scale_indicator(env)
-        
-        self._draw_info_text(env)
-        
-        env.overlay_manager.render(self.screen, env._world_to_screen, env._meters_to_pixels)
-
-        env.performance_tracker.render(self.screen, self.screen_size, env.simulation_time)
-        
-        if self.render_mode == "human":
-            pygame.event.pump()
-            pygame.display.flip()
-            self.clock.tick(self.render_fps)
-            return None
-        
-        return np.transpose(
-            np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
-        )
-    
-    def _draw_grid(self, env) -> None:
-        grid_spacing = 10.0  # meters
-        grid_color = (200, 200, 200)
-        
-        min_x, min_y = env.world_origin
-        max_x = min_x + env.world_size[0]
-        max_y = min_y + env.world_size[1]
-        
-        # Vertical grid lines
-        x = np.ceil(min_x / grid_spacing) * grid_spacing
-        while x <= max_x:
-            start = env._world_to_screen((x, min_y))
-            end = env._world_to_screen((x, max_y))
-            pygame.draw.line(self.screen, grid_color, start, end, 1)
-            x += grid_spacing
-        
-        # Horizontal grid lines
-        y = np.ceil(min_y / grid_spacing) * grid_spacing
-        while y <= max_y:
-            start = env._world_to_screen((min_x, y))
-            end = env._world_to_screen((max_x, y))
-            pygame.draw.line(self.screen, grid_color, start, end, 1)
-            y += grid_spacing
-    
-    def _draw_roads(self, env) -> None:
-        """Draw road network."""
-        # First pass: draw all road surfaces (polygons)
-        for road in env.road_network.roads:
-            half_width = road.lane_config.half_width
-            
-            for segment in road.segments:
-                num_points = max(20, int(segment.get_length() * 2))
-                left, right = segment.get_boundary_points(half_width, num_points)
-                
-                left_screen = [env._world_to_screen(p) for p in left]
-                right_screen = [env._world_to_screen(p) for p in right]
-                
-                polygon_points = left_screen + right_screen[::-1]
-                if len(polygon_points) >= 3:
-                    pygame.draw.polygon(self.screen, constants.gray, polygon_points)
-        
-        # Second pass: draw boundary lines and center lines
-        for road in env.road_network.roads:
-            half_width = road.lane_config.half_width
-            num_lanes = road.lane_config.num_lanes
-            total_length = road.get_total_length()
-            
-            # Calculate trim amounts in terms of fraction of total length
-            start_trim_frac = road.start_trim / total_length if total_length > 0 else 0
-            end_trim_frac = road.end_trim / total_length if total_length > 0 else 0
-            
-            for seg_idx, segment in enumerate(road.segments):
-                seg_length = segment.get_length()
-                num_points = max(20, int(seg_length * 2))
-                left, right = segment.get_boundary_points(half_width, num_points)
-                
-                # Calculate which points to trim for this segment
-                is_first_segment = seg_idx == 0
-                is_last_segment = seg_idx == len(road.segments) - 1
-                
-                # Trim start of first segment
-                start_idx = 0
-                if is_first_segment and road.start_trim > 0:
-                    trim_points = int(road.start_trim / seg_length * num_points)
-                    start_idx = min(trim_points, num_points - 2)
-                
-                # Trim end of last segment
-                end_idx = num_points
-                if is_last_segment and road.end_trim > 0:
-                    trim_points = int(road.end_trim / seg_length * num_points)
-                    end_idx = max(num_points - trim_points, start_idx + 2)
-                
-                # Get trimmed boundary points
-                left_trimmed = left[start_idx:end_idx]
-                right_trimmed = right[start_idx:end_idx]
-                
-                left_screen = [env._world_to_screen(p) for p in left_trimmed]
-                right_screen = [env._world_to_screen(p) for p in right_trimmed]
-                
-                if len(left_screen) >= 2:
-                    pygame.draw.lines(self.screen, constants.dark_gray, False, left_screen, 3)
-                    pygame.draw.lines(self.screen, constants.dark_gray, False, right_screen, 3)
-                
-                centerline = segment.get_centerline_points(num_points)
-                if num_lanes > 1:
-                    center_screen = [env._world_to_screen(p) for p in centerline]
-                    for i in range(0, len(center_screen) - 1, 4):
-                        end_idx = min(i + 2, len(center_screen) - 1)
-                        pygame.draw.line(
-                            self.screen,
-                            constants.yellow,
-                            center_screen[i],
-                            center_screen[end_idx],
-                            2,
-                        )
-    
-    def _draw_global_path(self, env) -> None:
-        """Draw global path."""
-        global_path = env.global_path
-        path_screen = [env._world_to_screen(p) for p in global_path]
-        # Draw path line (closed loop if it's a circular path)
-        is_loop = True  # Assume loop by default
-        pygame.draw.lines(self.screen, (150, 100, 200), is_loop, path_screen, 2)
-        # Draw waypoints as small circles (only every few points for cleaner look)
-        step = max(1, len(path_screen) // 128)  # Show ~30 waypoint markers max
-        for i in range(0, len(path_screen), step):
-            point = path_screen[i]
-            # Color start point constants.green, others purple
-            if i == 0:
-                color = (100, 200, 100)
-                radius = 6
-            else:
-                color = (150, 100, 200)
-                radius = 3
-            pygame.draw.circle(self.screen, color, point, radius)
-    
-    def _draw_obstacles(self, env) -> None:
-        for obs in env.obstacles:
-            center_screen = env._world_to_screen(obs.center)
-            # Import here to avoid circular dependency
-            from ..components.obstacles import Circle, Rectangle
-            if isinstance(obs, Circle):
-                radius_px = env._meters_to_pixels(obs.radius)
-                pygame.draw.circle(self.screen, constants.red, center_screen, radius_px)
-                pygame.draw.circle(self.screen, constants.dark_gray, center_screen, radius_px, 2)
-            elif isinstance(obs, Rectangle):
-                width_px = env._meters_to_pixels(obs.width)
-                height_px = env._meters_to_pixels(obs.height)
-                rect = pygame.Rect(
-                    center_screen[0] - width_px // 2,
-                    center_screen[1] - height_px // 2,
-                    width_px,
-                    height_px,
-                )
-                pygame.draw.rect(self.screen, constants.red, rect)
-                pygame.draw.rect(self.screen, constants.dark_gray, rect, 2)
-    
-    def _draw_goal(self, env) -> None:
-        goal_screen = env._world_to_screen(env.goal_pos)
-        goal_radius_px = env._meters_to_pixels(env.goal_radius)
-        pygame.draw.circle(self.screen, constants.green, goal_screen, goal_radius_px)
-        pygame.draw.circle(self.screen, constants.dark_gray, goal_screen, goal_radius_px, 2)
-    
-    def _draw_car(self, env) -> None:
-        """Draw car as a proper rectangle with heading."""
-        state = env.state
-        x, y, theta, v = state
-        
-        # Use instance car dimensions
-        half_length = env.CAR_LENGTH / 2
-        half_width = env.CAR_WIDTH / 2
-        
-        # Get car corners using the helper method
-        corners_world = env._get_car_corners()
-        
-        # Convert to screen coordinates
-        corners_screen = [env._world_to_screen(corner) for corner in corners_world]
-        
-        # Draw car body
-        pygame.draw.polygon(self.screen, constants.blue, corners_screen)
-        pygame.draw.polygon(self.screen, constants.dark_gray, corners_screen, 2)
-        
-        # Draw front indicator (small triangle at front)
-        pos = np.array([x, y])
-        c, s = np.cos(theta), np.sin(theta)
-        rot = np.array([[c, -s], [s, c]])
-        front_center = pos + rot @ np.array([half_length, 0])
-        front_left = pos + rot @ np.array([half_length - 0.5, half_width * 0.5])
-        front_right = pos + rot @ np.array([half_length - 0.5, -half_width * 0.5])
-        front_points = [
-            env._world_to_screen(front_center),
-            env._world_to_screen(front_left),
-            env._world_to_screen(front_right),
-        ]
-        pygame.draw.polygon(self.screen, (100, 100, 220), front_points)
-    
-    def _draw_spawn(self, env) -> None:
-        """Draw spawn marker."""
-        spawn_screen = env._world_to_screen(env.spawn_pos)
-        pygame.draw.circle(self.screen, constants.black, spawn_screen, 5)
-        pygame.draw.circle(self.screen, constants.white, spawn_screen, 3)
-    
-    def _draw_scale_indicator(self, env) -> None:
-        """Draw a scale bar showing real-world distance."""
-        # Draw a 10-meter scale bar in the bottom-right corner
-        scale_length_m = 10.0
-        scale_length_px = env._meters_to_pixels(scale_length_m)
-        
-        bar_x = self.screen_size[0] - scale_length_px - 20
-        bar_y = self.screen_size[1] - 30
-        
-        # Draw the bar
-        pygame.draw.line(
-            self.screen,
-            (0, 0, 0),
-            (bar_x, bar_y),
-            (bar_x + scale_length_px, bar_y),
-            3,
-        )
-        # End caps
-        pygame.draw.line(
-            self.screen, (0, 0, 0), (bar_x, bar_y - 5), (bar_x, bar_y + 5), 2
-        )
-        pygame.draw.line(
-            self.screen,
-            (0, 0, 0),
-            (bar_x + scale_length_px, bar_y - 5),
-            (bar_x + scale_length_px, bar_y + 5),
-            2,
-        )
-        
-        # Label
-        font = pygame.font.Font(None, 20)
-        text = font.render(f"{scale_length_m:.0f}m", True, (0, 0, 0))
-        text_rect = text.get_rect(center=(bar_x + scale_length_px // 2, bar_y - 12))
-        self.screen.blit(text, text_rect)
-    
-    def _draw_info_text(self, env) -> None:
-        """Draw current state information."""
-        state = env.state
-        if state is None:
-            return
-        
-        font = pygame.font.Font(None, 24)
-        x, y, theta, v = state
-        
-        lines = [
-            f"Position: ({x:.1f}m, {y:.1f}m)",
-            f"Heading: {np.degrees(theta):.1f} deg",
-            f"Velocity: {v:.1f} m/s ({v * 3.6:.1f} km/h)",
-        ]
-        
-        if env.road_network is not None:
-            on_road = not env.road_network.is_off_road(state[:2])
-            lines.append(f"On road: {'Yes' if on_road else 'No'}")
-        
-        for i, line in enumerate(lines):
-            text = font.render(line, True, (0, 0, 0))
-            self.screen.blit(text, (10, 10 + i * 22))
-    
-    def close(self) -> None:
-        if self.screen is not None:
-            pygame.quit()
-            self.screen = None
-            self.clock = None
 </file>
 
 <file path="metrics/__init__.py">
@@ -1767,6 +1563,386 @@ def preview(
     display(pil_img)
 </file>
 
+<file path="questions.md">
+> So autonomous driving is a supervised learning task, tesla has all the data, they just need to annotate it all and the network would receive the current state and predict the action to take, no reinforcement learning is required in here ? And same thing for controlling a robotic arm to learn to transfer objects between bins, we don't need any reinforcement learning do we ?
+
+Indeed, they first train classical neural networks to predict what and how to control, but on top of that they add reinforcement learning through **RLHF** (Reinforcement Learning From Human Feedback) to handle out of distribution scenarios.
+</file>
+
+<file path="README.md">
+# Simple Gymnasium Environment for Control Algorithms
+
+No rewarding nor termination system is implemented, you can extend the environment to add your own.
+
+--- --- ---
+
+Be careful to not over engineer it.
+</file>
+
+<file path="environments/bicycle/components/renderer.py">
+import typing
+import pygame
+
+import numpy as np
+
+import environments.bicycle.components.constants as constants
+
+class Renderer:
+    def __init__(
+        self,
+        screen_size: typing.Tuple[int, int],
+        render_mode: str | None,
+        render_fps: int = 30,
+    ):
+        self.screen_size = screen_size
+        self.render_mode = render_mode
+        self.render_fps = render_fps
+        
+        self.screen: pygame.Surface | None = None
+        self.clock: pygame.time.Clock | None = None
+    
+    def initialize(self) -> None:
+        if self.screen is None:
+            pygame.init()
+            if self.render_mode == "human":
+                pygame.display.init()
+                self.screen = pygame.display.set_mode(self.screen_size)
+                pygame.display.set_caption("Bicycle Car Environment")
+            else:
+                self.screen = pygame.Surface(self.screen_size)
+            self.clock = pygame.time.Clock()
+    
+    def render_frame(self, env) -> np.ndarray | None:
+        """
+        Returns:
+            RGB array if render_mode is "rgb_array", None otherwise
+        """
+        self.initialize()
+        
+        self.screen.fill(constants.light_gray)
+        
+        self._draw_grid(env)
+        
+        if env.road_network is not None:
+            self._draw_roads(env)
+        
+        if env.path is not None and len(env.path) > 1:
+            self._draw_global_path(env)
+        
+        self._draw_obstacles(env)
+        
+        self._draw_goal(env)
+        
+        if env.state is not None:
+            self._draw_car(env)
+        
+        self._draw_spawn(env)
+        
+        self._draw_scale_indicator(env)
+        
+        self._draw_info_text(env)
+        
+        env.overlay_manager.render(self.screen, env._world_to_screen, env._meters_to_pixels)
+
+        env.performance_tracker.render(self.screen, self.screen_size, env.simulation_time)
+        
+        if self.render_mode == "human":
+            pygame.event.pump()
+            pygame.display.flip()
+            self.clock.tick(self.render_fps)
+            return None
+        
+        return np.transpose(
+            np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
+        )
+    
+    def _draw_grid(self, env) -> None:
+        # TODO: externalize
+        grid_spacing = 10.0  # meters
+        grid_color = (200, 200, 200)
+        
+        min_x, min_y = env.world_origin
+        max_x = min_x + env.world_size[0]
+        max_y = min_y + env.world_size[1]
+        
+        # vertical grid lines
+        x = np.ceil(min_x / grid_spacing) * grid_spacing
+        while x <= max_x:
+            start = env._world_to_screen((x, min_y))
+            end = env._world_to_screen((x, max_y))
+            pygame.draw.line(self.screen, grid_color, start, end, 1)
+            x += grid_spacing
+        
+        # horizontal grid lines
+        y = np.ceil(min_y / grid_spacing) * grid_spacing
+        while y <= max_y:
+            start = env._world_to_screen((min_x, y))
+            end = env._world_to_screen((max_x, y))
+            pygame.draw.line(self.screen, grid_color, start, end, 1)
+            y += grid_spacing
+    
+    def _draw_roads(self, env) -> None:
+        # First pass: draw all road surfaces (polygons)
+        for road in env.road_network.roads:
+            half_width = road.lane_config.half_width
+            
+            for segment in road.segments:
+                num_points = max(20, int(segment.get_length() * 2))
+                left, right = segment.get_boundary_points(half_width, num_points)
+                
+                left_screen = [env._world_to_screen(p) for p in left]
+                right_screen = [env._world_to_screen(p) for p in right]
+                
+                polygon_points = left_screen + right_screen[::-1]
+                if len(polygon_points) >= 3:
+                    pygame.draw.polygon(self.screen, constants.gray, polygon_points)
+        
+        # Second pass: draw boundary lines and center lines
+        for road in env.road_network.roads:
+            half_width = road.lane_config.half_width
+            num_lanes = road.lane_config.num_lanes
+            total_length = road.get_total_length()
+            
+            # Calculate trim amounts in terms of fraction of total length
+            start_trim_frac = road.start_trim / total_length if total_length > 0 else 0
+            end_trim_frac = road.end_trim / total_length if total_length > 0 else 0
+            
+            for seg_idx, segment in enumerate(road.segments):
+                seg_length = segment.get_length()
+                num_points = max(20, int(seg_length * 2))
+                left, right = segment.get_boundary_points(half_width, num_points)
+                
+                # Calculate which points to trim for this segment
+                is_first_segment = seg_idx == 0
+                is_last_segment = seg_idx == len(road.segments) - 1
+                
+                # Trim start of first segment
+                start_idx = 0
+                if is_first_segment and road.start_trim > 0:
+                    trim_points = int(road.start_trim / seg_length * num_points)
+                    start_idx = min(trim_points, num_points - 2)
+                
+                # Trim end of last segment
+                end_idx = num_points
+                if is_last_segment and road.end_trim > 0:
+                    trim_points = int(road.end_trim / seg_length * num_points)
+                    end_idx = max(num_points - trim_points, start_idx + 2)
+                
+                # Get trimmed boundary points
+                left_trimmed = left[start_idx:end_idx]
+                right_trimmed = right[start_idx:end_idx]
+                
+                left_screen = [env._world_to_screen(p) for p in left_trimmed]
+                right_screen = [env._world_to_screen(p) for p in right_trimmed]
+                
+                if len(left_screen) >= 2:
+                    pygame.draw.lines(self.screen, constants.dark_gray, False, left_screen, 3)
+                    pygame.draw.lines(self.screen, constants.dark_gray, False, right_screen, 3)
+                
+                centerline = segment.get_centerline_points(num_points)
+                if num_lanes > 1:
+                    center_screen = [env._world_to_screen(p) for p in centerline]
+                    for i in range(0, len(center_screen) - 1, 4):
+                        end_idx = min(i + 2, len(center_screen) - 1)
+                        pygame.draw.line(
+                            self.screen,
+                            constants.yellow,
+                            center_screen[i],
+                            center_screen[end_idx],
+                            2,
+                        )
+    
+    def _draw_global_path(self, env) -> None:
+        global_path = env.path
+        path_screen = [env._world_to_screen(p) for p in global_path]
+        
+        is_loop = True  # Draw path line (closed loop if it's a circular path), assume loop by default
+        pygame.draw.lines(self.screen, (150, 100, 200), is_loop, path_screen, 2)
+        
+        for i in range(0, len(path_screen), max(1, len(path_screen) // 128)):
+            point = path_screen[i]
+            if i == 0:
+                color = (100, 200, 100)
+                radius = 6
+            else:
+                color = (150, 100, 200)
+                radius = 3
+            pygame.draw.circle(self.screen, color, point, radius)
+    
+    def _draw_obstacles(self, env) -> None:
+        for obs in env.obstacles:
+            center_screen = env._world_to_screen(obs.center)
+            # Import here to avoid circular dependency
+            from ..components.obstacles import Circle, Rectangle
+            if isinstance(obs, Circle):
+                radius_px = env._meters_to_pixels(obs.radius)
+                pygame.draw.circle(self.screen, constants.red, center_screen, radius_px)
+                pygame.draw.circle(self.screen, constants.dark_gray, center_screen, radius_px, 2)
+            elif isinstance(obs, Rectangle):
+                width_px = env._meters_to_pixels(obs.width)
+                height_px = env._meters_to_pixels(obs.height)
+                rect = pygame.Rect(
+                    center_screen[0] - width_px // 2,
+                    center_screen[1] - height_px // 2,
+                    width_px,
+                    height_px,
+                )
+                pygame.draw.rect(self.screen, constants.red, rect)
+                pygame.draw.rect(self.screen, constants.dark_gray, rect, 2)
+    
+    def _draw_goal(self, env) -> None:
+        goal_screen = env._world_to_screen(env.goal_pos)
+        goal_radius_px = env._meters_to_pixels(env.goal_radius)
+        pygame.draw.circle(self.screen, constants.green, goal_screen, goal_radius_px)
+        pygame.draw.circle(self.screen, constants.dark_gray, goal_screen, goal_radius_px, 2)
+    
+    def _draw_car(self, env) -> None:
+        """Draw car as a proper rectangle with heading."""
+        state = env.state
+        x, y, theta, v = state
+        
+        # Use instance car dimensions
+        half_length = env.CAR_LENGTH / 2
+        half_width = env.CAR_WIDTH / 2
+        
+        # Get car corners using the helper method
+        corners_world = env._get_car_corners()
+        
+        # Convert to screen coordinates
+        corners_screen = [env._world_to_screen(corner) for corner in corners_world]
+        
+        # Draw car body
+        pygame.draw.polygon(self.screen, constants.blue, corners_screen)
+        pygame.draw.polygon(self.screen, constants.dark_gray, corners_screen, 2)
+        
+        # Draw front indicator (small triangle at front)
+        pos = np.array([x, y])
+        c, s = np.cos(theta), np.sin(theta)
+        rot = np.array([[c, -s], [s, c]])
+        front_center = pos + rot @ np.array([half_length, 0])
+        front_left = pos + rot @ np.array([half_length - 0.5, half_width * 0.5])
+        front_right = pos + rot @ np.array([half_length - 0.5, -half_width * 0.5])
+        front_points = [
+            env._world_to_screen(front_center),
+            env._world_to_screen(front_left),
+            env._world_to_screen(front_right),
+        ]
+        pygame.draw.polygon(self.screen, (100, 100, 220), front_points)
+    
+    def _draw_spawn(self, env) -> None:
+        spawn_screen = env._world_to_screen(env.spawn_pos)
+        pygame.draw.circle(self.screen, constants.black, spawn_screen, 5)
+        pygame.draw.circle(self.screen, constants.white, spawn_screen, 3)
+    
+    def _draw_scale_indicator(self, env) -> None:
+        # Draw a 10-meter scale bar in the bottom-right corner
+        scale_length_m = 10.0
+        scale_length_px = env._meters_to_pixels(scale_length_m)
+        
+        bar_x = self.screen_size[0] - scale_length_px - 20
+        bar_y = self.screen_size[1] - 30
+        
+        # Draw the bar
+        pygame.draw.line(
+            self.screen,
+            (0, 0, 0),
+            (bar_x, bar_y),
+            (bar_x + scale_length_px, bar_y),
+            3,
+        )
+        # End caps
+        pygame.draw.line(
+            self.screen, (0, 0, 0), (bar_x, bar_y - 5), (bar_x, bar_y + 5), 2
+        )
+        pygame.draw.line(
+            self.screen,
+            (0, 0, 0),
+            (bar_x + scale_length_px, bar_y - 5),
+            (bar_x + scale_length_px, bar_y + 5),
+            2,
+        )
+        
+        # Label
+        font = pygame.font.Font(None, 20)
+        text = font.render(f"{scale_length_m:.0f}m", True, (0, 0, 0))
+        text_rect = text.get_rect(center=(bar_x + scale_length_px // 2, bar_y - 12))
+        self.screen.blit(text, text_rect)
+    
+    def _draw_info_text(self, env) -> None:
+        state = env.state
+        if state is None:
+            return
+        
+        font = pygame.font.Font(None, 24)
+        x, y, theta, v = state
+        
+        lines = [
+            f"Position: ({x:.1f}m, {y:.1f}m)",
+            f"Heading: {np.degrees(theta):.1f} deg",
+            f"Velocity: {v:.1f} m/s ({v * 3.6:.1f} km/h)",
+        ]
+        
+        if env.road_network is not None:
+            on_road = not env.road_network.is_off_road(state[:2])
+            lines.append(f"On road: {'Yes' if on_road else 'No'}")
+        
+        for i, line in enumerate(lines):
+            text = font.render(line, True, (0, 0, 0))
+            self.screen.blit(text, (10, 10 + i * 22))
+    
+    def close(self) -> None:
+        if self.screen is not None:
+            pygame.quit()
+            self.screen = None
+            self.clock = None
+</file>
+
+<file path="environments/bicycle/__init__.py">
+from .environment import *
+</file>
+
+<file path="environments/TODOs.md">
+# Road Todos
+
+- [ ] Simplify the road implementation by using a graph based definition. The renderer will then draw everything correctly.
+- [ ] Implement the observation wrappers.
+- [ ] Implement some action "discretizer" wrappers.
+- [ ] Implement some reward wrappers.
+
+Checkout https://github.com/danielriege/tinycarlo/tree/main/mapbuilder which is an alternative that is pretty well made. It might be of interest.
+
+So the idea is to define the road as a graph:
+- Each node will have a position.
+- Edges connecting the nodes will have some data to encode:
+  - Road length.
+  - Type of connection: straight line, arc, merge, etc.
+  - Number of lanes
+
+But this might be too much, so I think we'll stick to our current roads for now and teach the networks to behave on them instead.
+
+---
+
+- [x] Have all the dimensions be to scale, replicate parking lot, renault zoe dimensions, etc.
+- [ ] Implement some control algorithms.
+  - [ ] Rule based.
+  - [ ] Discretized Q-Learning.
+  - [ ] Policy Gradient.
+  - [ ] Imitation Learning. https://www.youtube.com/watch?v=GDmhrAHxgQE
+  - [ ] Neural Network Based Controllers, etc.
+  - [x] Pure Pursuit.
+  - [x] Stanley.
+  - [x] PID.
+  - [x] Clothoids.
+- [x] Add real timing, fps and a controllable speed up of time.
+- [x] Add collision with road sides. Enabled overall and controllable on road network on creation on each individual segment.
+- [ ] Add "Distance" to lane center into the observation data.
+
+- [ ] Ask what is the speed used for the car for test drives.
+- [ ] Understand and simplify the clothoid based controller.
+- [ ] Make the clothoid based controller with other types of functions such as polynoms, etc.
+- [ ] Make the environment more realistic by returning predictions in the observation state, like possibility to add a model that'll take the observation and return a prediction.
+</file>
+
 <file path="index.py">
 import cristal
 
@@ -1849,7 +2025,7 @@ obs, info = env.reset()
 for i in range(500):
     action = controller.get_action(
         observation=obs,
-        path=env.global_path,
+        path=env.path,
         obstacles=env.obstacles,
         road_network=env.road_network,
         dt=env.dt,
@@ -1860,7 +2036,7 @@ for i in range(500):
     obs, reward, terminated, truncated, info = env.step(action)
     
     env.overlay_manager.clear()
-    controller.draw_debug(env, obs, env.global_path)
+    controller.draw_debug(env, obs, env.path)
     
     # helpers.preview(env)
 
@@ -1872,44 +2048,6 @@ env.close()
 print(f"\nSimulation completed after {env.performance_tracker.step_count} steps")
 print(f"Final position: {obs['position']}")
 print(f"Final velocity: {obs['velocity'][0]:.2f} m/s")
-</file>
-
-<file path="questions.md">
-> So autonomous driving is a supervised learning task, tesla has all the data, they just need to annotate it all and the network would receive the current state and predict the action to take, no reinforcement learning is required in here ? And same thing for controlling a robotic arm to learn to transfer objects between bins, we don't need any reinforcement learning do we ?
-
-Indeed, they first train classical neural networks to predict what and how to control, but on top of that they add reinforcement learning through **RLHF** (Reinforcement Learning From Human Feedback) to handle out of distribution scenarios.
-</file>
-
-<file path="README.md">
-# Simple Gymnasium Environment for Control Algorithms
-
-No rewarding nor termination system is implemented, you can extend the environment to add your own.
-</file>
-
-<file path="environments/bicycle/__init__.py">
-from .environment import *
-</file>
-
-<file path="environments/TODOs.md">
-- [x] Have all the dimensions be to scale, replicate parking lot, renault zoe dimensions, etc.
-- [ ] Implement some control algorithms.
-  - [ ] Rule based.
-  - [ ] Discretized Q-Learning.
-  - [ ] Policy Gradient.
-  - [ ] Imitation Learning. https://www.youtube.com/watch?v=GDmhrAHxgQE
-  - [ ] Neural Network Based Controllers, etc.
-  - [x] Pure Pursuit.
-  - [x] Stanley.
-  - [x] PID.
-  - [x] Clothoids.
-- [x] Add real timing, fps and a controllable speed up of time.
-- [x] Add collision with road sides. Enabled overall and controllable on road network on creation on each individual segment.
-- [ ] Add "Distance" to lane center into the observation data.
-
-- [ ] Ask what is the speed used for the car for test drives.
-- [ ] Understand and simplify the clothoid based controller.
-- [ ] Make the clothoid based controller with other types of functions such as polynoms, etc.
-- [ ] Make the environment more realistic by returning predictions in the observation state, like possibility to add a model that'll take the observation and return a prediction.
 </file>
 
 <file path="controllers/__init__.py">
@@ -3164,8 +3302,7 @@ class BicycleCarEnv(gymnasium.Env):
 
         self.state = None
         
-        self.global_path = None  # Will store waypoints as (N, 2) array
-        self._compute_global_path()
+        self.path = self._compute_global_path()  # Will store waypoints as (N, 2) array
 
         self._episode_data = {
             'actions': [],
@@ -3255,60 +3392,35 @@ class BicycleCarEnv(gymnasium.Env):
         return max(1, int(meters * self.pixels_per_meter))
 
     def _compute_global_path(self) -> None:
-        """
-        Compute a closed-loop global path following the road centerline.
-        
-        The path starts at spawn, follows the entire road loop in the road's
-        direction, and returns to the spawn point. This is ideal for track-based
-        scenarios where the vehicle navigates the full circuit.
-        """
         if self.road_network is None:
-            # Simple straight line from spawn to goal
-            self.global_path = np.array([self.spawn_pos, self.goal_pos], dtype=np.float32)
+            self.path = np.array(
+                [self.spawn_pos, self.goal_pos], dtype=np.float32
+            )
             return
         
-        # Extract all centerline points from the road network (preserving order)
-        all_centerline_points = []
-        
+        all_points = []
         for road in self.road_network.roads:
             for segment in road.segments:
-                # Use more points for smoother paths (increased density for better controller performance)
-                num_points = max(256, int(segment.get_length() * 5))
-                centerline = segment.get_centerline_points(num_points)
-                all_centerline_points.extend(centerline)
+                num_points = max(50, int(segment.get_length() * 2))
+                all_points.extend(segment.get_centerline_points(num_points))
         
-        if not all_centerline_points:
-            # Fallback to straight line
-            self.global_path = np.array([self.spawn_pos, self.goal_pos], dtype=np.float32)
+        if not all_points:
+            self.path = np.array(
+                [self.spawn_pos, self.goal_pos], dtype=np.float32
+            )
             return
         
-        centerline_array = np.array(all_centerline_points, dtype=np.float32)
+        centerline = np.array(all_points, dtype=np.float32)
         
-        # Find the closest point on centerline to spawn
-        spawn_distances = np.linalg.norm(centerline_array - self.spawn_pos, axis=1)
-        spawn_idx = np.argmin(spawn_distances)
+        # NOTE: find closest point to spawn and reorder path to start there
+        spawn_idx = np.argmin(np.linalg.norm(centerline - self.spawn_pos, axis=1))
+        self.path = np.vstack([
+            centerline[spawn_idx:],
+            centerline[:spawn_idx],
+            [self.spawn_pos]
+        ])
         
-        # Reorder the path to start from spawn_idx and wrap around
-        # This creates a full loop starting and ending near spawn
-        n_points = len(centerline_array)
-        reordered_indices = [(spawn_idx + i) % n_points for i in range(n_points)]
-        reordered_path = centerline_array[reordered_indices]
-        
-        # Build the final path with spawn at start
-        path_points = [self.spawn_pos.copy()]
-        
-        for point in reordered_path:
-            # Only add if not too close to the previous point (avoid duplication)
-            # Reduced threshold for denser path
-            if np.linalg.norm(point - path_points[-1]) > 0.2:
-                path_points.append(point)
-        
-        # Close the loop - return to spawn
-        if np.linalg.norm(self.spawn_pos - path_points[-1]) > 0.2:
-            path_points.append(self.spawn_pos.copy())
-        
-        self.global_path = np.array(path_points, dtype=np.float32)
-        self.global_path_is_loop = True  # Flag to indicate this is a closed loop
+        return self.path
 
     def reset(self, seed: int | None = None) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         super().reset(seed=seed)
@@ -3515,6 +3627,218 @@ class BicycleCarEnv(gymnasium.Env):
 
     def close(self) -> None:
         self.renderer.close()
+</file>
+
+<file path="index.ipynb">
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c2fd4ffb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload\n",
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "422780a5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import time\n",
+    "import tqdm\n",
+    "import helpers\n",
+    "\n",
+    "import environments\n",
+    "import environments.bicycle as bicycle\n",
+    "\n",
+    "import controllers.clothoids as clothoids\n",
+    "import controllers.purepursuit as purepursuit\n",
+    "\n",
+    "import metrics\n",
+    "\n",
+    "import numpy as np\n",
+    "import gymnasium as gym\n",
+    "import matplotlib.pyplot as plt"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8050a93d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "bicycle.create_oval_track(\n",
+    "    center=(50.0, 50.0),\n",
+    "    straight_length=80.0,\n",
+    "    turn_radius=16.0,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "81d298e3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "env = environments.bicycle.BicycleCarEnv(\n",
+    "    # road_network=bicycle.RoadNetwork(roads=[\n",
+    "    #     bicycle.create_oval_track(\n",
+    "    #         center=(50.0, 50.0),\n",
+    "    #         straight_length=50.0,\n",
+    "    #         turn_radius=16.0,\n",
+    "    #     )\n",
+    "    # ]),\n",
+    "    road_network=bicycle.RoadNetwork(roads=[\n",
+    "        bicycle.create_rectangular_track(\n",
+    "            center=(50.0, 50.0),\n",
+    "            length=80.0,\n",
+    "            width=40.0,\n",
+    "            turn_radius=8.0,\n",
+    "            lane_config=bicycle.lane_config_from_width(8.0, num_lanes=4),\n",
+    "        )\n",
+    "    ]),\n",
+    "    # road_network=bicycle.create_rectangular_track_with_cross(\n",
+    "    #     center=(50.0, 50.0),\n",
+    "    #     length=80.0,\n",
+    "    #     width=40.0,\n",
+    "    #     cross_width=4.5,\n",
+    "    #     turn_radius=8.0,\n",
+    "    #     lane_config=bicycle.lane_config_from_width(8.0, num_lanes=1),\n",
+    "    # ),\n",
+    "    render_mode=\"rgb_array\",\n",
+    "    spawn=((50.0, 30.0), 0.0),\n",
+    "    goal=((10.0, 50.0), 2.0),\n",
+    "    obstacles=[\n",
+    "        bicycle.Circle(center=(90, 50), radius=1.0),\n",
+    "    ],\n",
+    "    solid_road_borders=True,\n",
+    "    # 0.1second = 100ms per step\n",
+    "    dt=0.1\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "cf2732e9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "controller = clothoids.ClothoidTentaclesController(\n",
+    "    num_tentacles=41,\n",
+    "    # t0=7.0,\n",
+    "    t0=10.0,\n",
+    "    # l0=5.0,\n",
+    "    l0=10.0,\n",
+    "    num_points_per_tentacle=64,\n",
+    "\n",
+    "    wheelbase=env.WHEELBASE,\n",
+    "    vehicle_width=env.CAR_WIDTH,\n",
+    "    max_lateral_acceleration=4.0,\n",
+    "    max_deceleration=1.5,\n",
+    "\n",
+    "    # clearance, curvature, trajectory\n",
+    "    weights=(0.1, 0.2, 0.5),\n",
+    "\n",
+    "    # TODO: I set a target velocity of 3.5 but the controller always goes at 5.0 m/s\n",
+    "    target_velocity=3.5,\n",
+    "    kp_velocity=2.0,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6a4de1b6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "obs, info = env.reset()\n",
+    "\n",
+    "for i in range(500):\n",
+    "    action = controller.get_action(\n",
+    "        observation=obs,\n",
+    "        path=env.path,\n",
+    "        obstacles=env.obstacles,\n",
+    "        road_network=env.road_network,\n",
+    "        max_steering=env.MAX_STEERING,\n",
+    "        max_acceleration=env.MAX_ACCELERATION,\n",
+    "    )\n",
+    "    \n",
+    "    obs, reward, terminated, truncated, info = env.step(action)\n",
+    "    \n",
+    "    env.overlay_manager.clear()\n",
+    "    controller.draw_debug(env, obs, env.path)\n",
+    "    \n",
+    "    helpers.preview(env)\n",
+    "\n",
+    "    if terminated or truncated:\n",
+    "        break\n",
+    "\n",
+    "env.close()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a09f2600",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Get episode data and compute metrics\n",
+    "episode_data = env.get_episode_data()\n",
+    "# print(f\"Episode finished after {i+1} steps\")\n",
+    "\n",
+    "# Compute metrics\n",
+    "print(\"\\n=== Performance Metrics ===\")\n",
+    "\n",
+    "cte_metrics = metrics.compute_cross_track_error(\n",
+    "    positions=episode_data['positions'],\n",
+    "    reference_path=env.path,\n",
+    ")\n",
+    "print(f\"CTE RMS: {cte_metrics['cte_rms']:.3f} m\")\n",
+    "\n",
+    "smoothness_metrics = metrics.compute_steering_smoothness(\n",
+    "    steering_angles=episode_data['steering_angles'],\n",
+    "    dt=env.dt,\n",
+    ")\n",
+    "print(f\"Steering Jerk RMS: {smoothness_metrics['steering_jerk_rms']:.3f} rad/s³\")\n",
+    "\n",
+    "success = metrics.compute_success_rate([episode_data])\n",
+    "print(f\"Success: {'Yes' if success == 1.0 else 'No'}\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": ".venv.mac",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.8"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
 </file>
 
 </files>
