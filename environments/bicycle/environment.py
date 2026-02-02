@@ -78,19 +78,7 @@ class BicycleCarEnv(gymnasium.Env):
             dtype=np.float32,
         )
 
-        self.observation_space = gymnasium.spaces.Dict(
-            {
-                "position": gymnasium.spaces.Box(
-                    -np.inf, np.inf, shape=(2,), dtype=np.float32
-                ),
-                "heading": gymnasium.spaces.Box(
-                    -np.pi, np.pi, shape=(1,), dtype=np.float32
-                ),
-                "velocity": gymnasium.spaces.Box(
-                    -BicycleCarEnv.MAX_VELOCITY, BicycleCarEnv.MAX_VELOCITY, shape=(1,), dtype=np.float32
-                ),
-            }
-        )
+        self.observation_space = gymnasium.spaces.Dict({})
 
         self.state = None
         
@@ -214,7 +202,7 @@ class BicycleCarEnv(gymnasium.Env):
         
         return self.path
 
-    def reset(self, seed: int | None = None) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
+    def reset(self, seed: int | None = None, **kwargs) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         super().reset(seed=seed)
 
         self.state = np.array(
@@ -326,11 +314,7 @@ class BicycleCarEnv(gymnasium.Env):
         return observation, reward, terminated, truncated, info
 
     def _get_observation(self) -> dict[str, typing.Any]:
-        return {
-            "position": self.state[:2].copy(),
-            "heading": np.array([self.state[2]], dtype=np.float32),
-            "velocity": np.array([self.state[3]], dtype=np.float32),
-        }
+        return {}
         
     def _get_car_corners(self) -> np.ndarray:
         x, y, theta, _ = self.state

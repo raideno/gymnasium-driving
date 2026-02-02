@@ -8,9 +8,11 @@ from IPython.display import display, clear_output
 
 def preview(
     environment,
+    clear: bool = True,
 ):
     image = environment.render()
-    clear_output(wait=True)
+    if clear:
+        clear_output(wait=True)
     
     pil_img = PILImage.fromarray(image)
     
