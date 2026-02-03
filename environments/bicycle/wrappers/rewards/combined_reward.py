@@ -111,6 +111,8 @@ class CombinedReward(gymnasium.Wrapper):
         self._prev_obstacle_positions: typing.Dict[int, np.ndarray] = {}
         self._steps = 0
     
+    # TODO: continuously send a reward of -1
+    # TODO: remove the survival reward
     def step(self, action):
         observation, reward, terminated, truncated, info = self.env.step(action)
         
@@ -119,27 +121,26 @@ class CombinedReward(gymnasium.Wrapper):
         # Compute all reward components
         reward_components = {}
         
-        # Path following
-        path_rewards = self._compute_path_rewards(observation)
-        reward_components.update(path_rewards)
+        # path following
+        path_following_rewards = self._compute_path_following_rewards(observation)
+        reward_components.update(path_following_rewards)
         
-        # Obstacle risk
-        risk_rewards = self._compute_risk_rewards(observation)
-        reward_components.update(risk_rewards)
+        # obstacle risk
+        obstacle_risk_rewards = self._compute_obstacle_risk_rewards(observation)
+        reward_components.update(obstacle_risk_rewards)
         
-        # Boundary
+        # boundary
         boundary_rewards = self._compute_boundary_rewards(observation)
         reward_components.update(boundary_rewards)
         
-        # Smoothness
+        # smoothness
         smoothness_rewards = self._compute_smoothness_rewards(action, observation)
         reward_components.update(smoothness_rewards)
         
-        # Survival
+        # survival
         survival_rewards = self._compute_survival_rewards(observation, terminated, truncated)
         reward_components.update(survival_rewards)
         
-        # Aggregate weighted rewards
         total_reward = 0.0
         weighted_components = {}
         
@@ -160,11 +161,12 @@ class CombinedReward(gymnasium.Wrapper):
         
         return observation, total_reward, terminated, truncated, info
     
-    def _compute_path_rewards(self, observation: dict) -> dict:
+    def _compute_path_following_rewards(self, observation: dict) -> dict:
         """Compute path following reward components."""
-        ego_pos = observation["position"]
-        ego_heading = observation["heading"][0]
-        ego_velocity = observation["velocity"][0]
+        state = self.env.unwrapped.state
+        ego_pos = state[:2]
+        ego_heading = state[2]
+        ego_velocity = state[3]
         
         path = self.env.path
         rewards = {
@@ -178,12 +180,12 @@ class CombinedReward(gymnasium.Wrapper):
         if path is None or len(path) < 2:
             return rewards
         
-        # Find closest point
+        # NOTE: closest point
         distances = np.linalg.norm(path - ego_pos, axis=1)
         closest_idx = np.argmin(distances)
         closest_point = path[closest_idx]
         
-        # Path direction
+        # NOTE: path direction
         if closest_idx < len(path) - 1:
             path_direction = path[closest_idx + 1] - path[closest_idx]
         else:
@@ -218,13 +220,14 @@ class CombinedReward(gymnasium.Wrapper):
         
         return rewards
     
-    def _compute_risk_rewards(self, observation: dict) -> dict:
+    def _compute_obstacle_risk_rewards(self, observation: dict) -> dict:
         """Compute obstacle risk reward components."""
         from ...components.obstacles import Circle, Rectangle
         
-        ego_pos = observation["position"]
-        ego_heading = observation["heading"][0]
-        ego_velocity = observation["velocity"][0]
+        state = self.env.unwrapped.state
+        ego_pos = state[:2]
+        ego_heading = state[2]
+        ego_velocity = state[3]
         
         ego_vel_vec = np.array([
             ego_velocity * np.cos(ego_heading),
@@ -305,7 +308,8 @@ class CombinedReward(gymnasium.Wrapper):
     
     def _compute_boundary_rewards(self, observation: dict) -> dict:
         """Compute boundary reward components."""
-        ego_pos = observation["position"]
+        state = self.env.unwrapped.state
+        ego_pos = state[:2]
         
         rewards = {
             "boundary": 0.0,
@@ -360,7 +364,8 @@ class CombinedReward(gymnasium.Wrapper):
     def _compute_smoothness_rewards(self, action: np.ndarray, observation: dict) -> dict:
         """Compute smoothness reward components."""
         steering = action[0]
-        velocity = observation["velocity"][0]
+        state = self.env.unwrapped.state
+        velocity = state[3]
         dt = self.env.dt
         
         rewards = {
@@ -407,7 +412,8 @@ class CombinedReward(gymnasium.Wrapper):
         
         goal_reached = False
         if terminated:
-            goal_dist = np.linalg.norm(observation["position"] - self.env.goal_pos)
+            state = self.env.unwrapped.state
+            goal_dist = np.linalg.norm(state[:2] - self.env.goal_pos)
             goal_reached = goal_dist <= self.env.goal_radius
         
         if terminated and not goal_reached:
