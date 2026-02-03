@@ -42,7 +42,7 @@ class WithPathInfo(gymnasium.ObservationWrapper):
         new_spaces = dict(self.observation_space.spaces)
         
         # waypoints in ego frame
-        new_spaces["path.waypoints"] = gymnasium.spaces.Box(
+        new_spaces["path/waypoints"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(num_waypoints, self.waypoint_dim),
@@ -50,7 +50,7 @@ class WithPathInfo(gymnasium.ObservationWrapper):
         )
         
         # path info: [cte, heading_error, progress, goal_distance]
-        new_spaces["path.info"] = gymnasium.spaces.Box(
+        new_spaces["path/info"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(4,),
@@ -72,8 +72,8 @@ class WithPathInfo(gymnasium.ObservationWrapper):
         path_info = np.zeros(4, dtype=np.float32)
         
         if path is None or len(path) < 2:
-            observation["path.waypoints"] = waypoints
-            observation["path.info"] = path_info
+            observation["path/waypoints"] = waypoints
+            observation["path/info"] = path_info
             return observation
         
         # NOTE: closest point on path
@@ -126,8 +126,8 @@ class WithPathInfo(gymnasium.ObservationWrapper):
             curvature = self._compute_curvature_at_index(path, current_idx)
             waypoints[i] = [rel_pos[0], rel_pos[1], curvature]
         
-        observation["path.waypoints"] = waypoints
-        observation["path.info"] = path_info
+        observation["path/waypoints"] = waypoints
+        observation["path/info"] = path_info
         
         return observation
     

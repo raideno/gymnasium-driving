@@ -37,13 +37,13 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         self.obs_dim = 5
         
         new_spaces = dict(self.observation_space.spaces)
-        new_spaces["obstacles.instances"] = gymnasium.spaces.Box(
+        new_spaces["obstacles/instances"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(max_obstacles, self.obs_dim),
             dtype=np.float32,
         )
-        new_spaces["obstacles.num_obstacles_detected"] = gymnasium.spaces.Box(
+        new_spaces["obstacles/num_obstacles_detected"] = gymnasium.spaces.Box(
             low=0,
             high=max_obstacles,
             shape=(1,),
@@ -101,8 +101,8 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         while len(obstacle_data) < self.max_obstacles:
             obstacle_data.append([0.0] * self.obs_dim)
         
-        observation["obstacles.instances"] = np.array(obstacle_data, dtype=np.float32)
-        observation["obstacles.num_obstacles_detected"] = np.array([num_detected], dtype=np.float32)
+        observation["obstacles/instances"] = np.array(obstacle_data, dtype=np.float32)
+        observation["obstacles/num_obstacles_detected"] = np.array([num_detected], dtype=np.float32)
         
         return observation
     

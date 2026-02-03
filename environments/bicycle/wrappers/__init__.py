@@ -5,8 +5,9 @@ Provides observation wrappers, reward wrappers, and action wrappers
 for customizing the environment for different learning tasks.
 """
 
-from . import observations
+from . import actions
 from . import rewards
+from . import observations
 
 # Re-export commonly used wrappers
 from .observations import (
@@ -20,10 +21,18 @@ from .rewards import (
     CombinedReward,
 )
 
+from .actions import (
+    DiscreteActionWrapper,
+    MultiDiscreteActionWrapper,
+    CoarseDiscreteActionWrapper,
+    FlattenMultiDiscreteWrapper
+)
+
 __all__ = [
     # Modules
     "observations",
     "rewards",
+    "actions",
     
     # Observation wrappers
     "WithObstaclesInfo",
@@ -33,4 +42,10 @@ __all__ = [
     
     # Reward wrappers
     "CombinedReward",
+    
+    # Actions
+    "DiscreteActionWrapper",
+    "MultiDiscreteActionWrapper",
+    "CoarseDiscreteActionWrapper",
+    "FlattenMultiDiscreteWrapper"
 ]

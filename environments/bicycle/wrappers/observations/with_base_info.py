@@ -1,20 +1,10 @@
-import typing
 import gymnasium
 
 import numpy as np
 
-
 class WithBaseInfo(gymnasium.ObservationWrapper):
     """
-    Adds base vehicle information to observations.
-    
-    Provides:
-    - Position (x, y) in world coordinates
-    - Heading (theta) in radians
-    - Velocity (v) in m/s
-    
-    Args:
-        env: The environment to wrap
+    [position x, position y, heading theta, velocity v]
     """
     
     def __init__(self, env: gymnasium.Env):
@@ -22,15 +12,15 @@ class WithBaseInfo(gymnasium.ObservationWrapper):
         
         new_spaces = dict(self.observation_space.spaces)
         
-        new_spaces["base.position"] = gymnasium.spaces.Box(
+        new_spaces["base/position"] = gymnasium.spaces.Box(
             -np.inf, np.inf, shape=(2,), dtype=np.float32
         )
         
-        new_spaces["base.heading"] = gymnasium.spaces.Box(
+        new_spaces["base/heading"] = gymnasium.spaces.Box(
             -np.pi, np.pi, shape=(1,), dtype=np.float32
         )
         
-        new_spaces["base.velocity"] = gymnasium.spaces.Box(
+        new_spaces["base/velocity"] = gymnasium.spaces.Box(
             -self.env.unwrapped.MAX_VELOCITY,
             self.env.unwrapped.MAX_VELOCITY,
             shape=(1,),
@@ -42,8 +32,8 @@ class WithBaseInfo(gymnasium.ObservationWrapper):
     def observation(self, observation: dict) -> dict:
         state = self.env.unwrapped.state
         
-        observation["base.position"] = state[:2].copy()
-        observation["base.heading"] = np.array([state[2]], dtype=np.float32)
-        observation["base.velocity"] = np.array([state[3]], dtype=np.float32)
+        observation["base/position"] = state[:2].copy()
+        observation["base/heading"] = np.array([state[2]], dtype=np.float32)
+        observation["base/velocity"] = np.array([state[3]], dtype=np.float32)
         
         return observation

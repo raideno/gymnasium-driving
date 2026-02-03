@@ -287,7 +287,7 @@ class BicycleCarEnv(gymnasium.Env):
         self.performance_tracker.update()
 
         observation = self._get_observation()
-        info = None
+        info = {}
         
         terminated = False
         truncated = False

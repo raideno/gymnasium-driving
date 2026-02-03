@@ -35,7 +35,7 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         new_spaces = dict(self.observation_space.spaces)
         
         # Core lane info: [cte, dist_left, dist_right, heading_error, curvature, is_off_road]
-        new_spaces["road.info"] = gymnasium.spaces.Box(
+        new_spaces["road/info"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(6,),
@@ -43,13 +43,13 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         )
         
         # Boundary points for more detailed road shape
-        new_spaces["road.left_boundary"] = gymnasium.spaces.Box(
+        new_spaces["road/left_boundary"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(num_boundary_points, 2),
             dtype=np.float32,
         )
-        new_spaces["road.right_boundary"] = gymnasium.spaces.Box(
+        new_spaces["road/right_boundary"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(num_boundary_points, 2),
@@ -68,9 +68,9 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         right_boundary = np.zeros((self.num_boundary_points, 2), dtype=np.float32)
         
         if self.env.unwrapped.road_network is None or len(self.env.unwrapped.road_network.roads) == 0:
-            observation["road.info"] = road_info
-            observation["road.left_boundary"] = left_boundary
-            observation["road.right_boundary"] = right_boundary
+            observation["road/info"] = road_info
+            observation["road/left_boundary"] = left_boundary
+            observation["road/right_boundary"] = right_boundary
             return observation
         
         # Find closest road and segment
@@ -80,9 +80,9 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         # Find closest point on centerline
         centerline = self._get_road_centerline(road)
         if len(centerline) == 0:
-            observation["road.info"] = road_info
-            observation["road.left_boundary"] = left_boundary
-            observation["road.right_boundary"] = right_boundary
+            observation["road/info"] = road_info
+            observation["road/left_boundary"] = left_boundary
+            observation["road/right_boundary"] = right_boundary
             return observation
         
         distances = np.linalg.norm(centerline - ego_pos, axis=1)
@@ -156,9 +156,9 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
             left_boundary[i] = rotation @ (left_pt - ego_pos)
             right_boundary[i] = rotation @ (right_pt - ego_pos)
         
-        observation["road.info"] = road_info
-        observation["road.left_boundary"] = left_boundary
-        observation["road.right_boundary"] = right_boundary
+        observation["road/info"] = road_info
+        observation["road/left_boundary"] = left_boundary
+        observation["road/right_boundary"] = right_boundary
         
         return observation
     

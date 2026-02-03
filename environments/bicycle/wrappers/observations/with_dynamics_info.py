@@ -30,14 +30,14 @@ class WithDynamicsInfo(gymnasium.ObservationWrapper):
         
         new_spaces = dict(self.observation_space.spaces)
         # dynamics: [accel_long, accel_lat, yaw_rate, slip_angle, jerk, steering_rate]
-        new_spaces["vehicle.dynamics"] = gymnasium.spaces.Box(
+        new_spaces["vehicle/dynamics"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(6,),
             dtype=np.float32,
         )
         # velocity components [vx, vy] in world frame
-        new_spaces["vehicle.velocity_components"] = gymnasium.spaces.Box(
+        new_spaces["vehicle/velocity_components"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(2,),
@@ -123,8 +123,8 @@ class WithDynamicsInfo(gymnasium.ObservationWrapper):
             steering_rate,
         ], dtype=np.float32)
         
-        observation["vehicle.dynamics"] = dynamics
-        observation["vehicle.velocity_components"] = np.array([vx, vy], dtype=np.float32)
+        observation["vehicle/dynamics"] = dynamics
+        observation["vehicle/velocity_components"] = np.array([vx, vy], dtype=np.float32)
         
         return observation
     
