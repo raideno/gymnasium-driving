@@ -54,9 +54,8 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         self._prev_obstacle_positions: typing.Dict[int, np.ndarray] = {}
     
     def observation(self, observation: dict) -> dict:
-        state = self.env.unwrapped.state
-        ego_pos = state[:2]
-        ego_heading = state[2]
+        ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        ego_heading = self.env.unwrapped.state["yaw"]
         
         # NOTE: rotation matrix to transform to ego frame
         cos_h, sin_h = np.cos(-ego_heading), np.sin(-ego_heading)

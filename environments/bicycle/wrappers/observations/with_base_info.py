@@ -30,10 +30,8 @@ class WithBaseInfo(gymnasium.ObservationWrapper):
         self.observation_space = gymnasium.spaces.Dict(new_spaces)
     
     def observation(self, observation: dict) -> dict:
-        state = self.env.unwrapped.state
-        
-        observation["base/position"] = state[:2].copy()
-        observation["base/heading"] = np.array([state[2]], dtype=np.float32)
-        observation["base/velocity"] = np.array([state[3]], dtype=np.float32)
+        observation["base/position"] = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        observation["base/heading"] = np.array([self.env.unwrapped.state["yaw"]], dtype=np.float32)
+        observation["base/velocity"] = np.array([self.env.unwrapped.state["velocity"]], dtype=np.float32)
         
         return observation

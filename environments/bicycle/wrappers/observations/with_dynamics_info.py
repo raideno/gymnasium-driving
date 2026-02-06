@@ -51,9 +51,8 @@ class WithDynamicsInfo(gymnasium.ObservationWrapper):
         self._accel_history: typing.List[float] = []
     
     def observation(self, observation: dict) -> dict:
-        state = self.env.unwrapped.state
-        heading = state[2]
-        velocity = state[3]
+        heading = self.env.unwrapped.state["yaw"]
+        velocity = self.env.unwrapped.state["velocity"]
         
         vx = velocity * np.cos(heading)
         vy = velocity * np.sin(heading)

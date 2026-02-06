@@ -59,9 +59,8 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         self.observation_space = gymnasium.spaces.Dict(new_spaces)
     
     def observation(self, observation: dict) -> dict:
-        state = self.env.unwrapped.state
-        ego_pos = state[:2]
-        ego_heading = state[2]
+        ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        ego_heading = self.env.unwrapped.state["yaw"]
         
         road_info = np.zeros(6, dtype=np.float32)
         left_boundary = np.zeros((self.num_boundary_points, 2), dtype=np.float32)

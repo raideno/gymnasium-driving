@@ -176,8 +176,7 @@ class Renderer:
     
     def _draw_car(self, env) -> None:
         """Draw car as a proper rectangle with heading."""
-        state = env.state
-        x, y, theta, v = state
+        x, y, theta, v = env.state["x"], env.state["y"], env.state["yaw"], env.state["velocity"]
         
         # Use instance car dimensions
         half_length = env.CAR_LENGTH / 2
@@ -252,7 +251,7 @@ class Renderer:
             return
         
         font = pygame.font.Font(None, 24)
-        x, y, theta, v = state
+        x, y, theta, v = state["x"], state["y"], state["yaw"], state["velocity"]
         
         lines = [
             f"Position: ({x:.1f}m, {y:.1f}m)",
@@ -261,7 +260,8 @@ class Renderer:
         ]
         
         if env.road_network is not None:
-            on_road = not env.road_network.is_off_road(state[:2])
+            ego_pos = np.array([env.unwrapped.state["x"], env.unwrapped.state["y"]], dtype=np.float32)
+            on_road = not env.road_network.is_off_road(ego_pos)
             lines.append(f"On road: {'Yes' if on_road else 'No'}")
         
         for i, line in enumerate(lines):

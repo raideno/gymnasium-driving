@@ -163,10 +163,9 @@ class CombinedReward(gymnasium.Wrapper):
     
     def _compute_path_following_rewards(self, observation: dict) -> dict:
         """Compute path following reward components."""
-        state = self.env.unwrapped.state
-        ego_pos = state[:2]
-        ego_heading = state[2]
-        ego_velocity = state[3]
+        ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        ego_heading = self.env.unwrapped.state["yaw"]
+        ego_velocity = self.env.unwrapped.state["velocity"]
         
         path = self.env.path
         rewards = {
@@ -224,10 +223,9 @@ class CombinedReward(gymnasium.Wrapper):
         """Compute obstacle risk reward components."""
         from ...components.obstacles import Circle, Rectangle
         
-        state = self.env.unwrapped.state
-        ego_pos = state[:2]
-        ego_heading = state[2]
-        ego_velocity = state[3]
+        ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        ego_heading = self.env.unwrapped.state["yaw"]
+        ego_velocity = self.env.unwrapped.state["velocity"]
         
         ego_vel_vec = np.array([
             ego_velocity * np.cos(ego_heading),
@@ -308,8 +306,7 @@ class CombinedReward(gymnasium.Wrapper):
     
     def _compute_boundary_rewards(self, observation: dict) -> dict:
         """Compute boundary reward components."""
-        state = self.env.unwrapped.state
-        ego_pos = state[:2]
+        ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
         
         rewards = {
             "boundary": 0.0,
@@ -364,8 +361,9 @@ class CombinedReward(gymnasium.Wrapper):
     def _compute_smoothness_rewards(self, action: np.ndarray, observation: dict) -> dict:
         """Compute smoothness reward components."""
         steering = action[0]
-        state = self.env.unwrapped.state
-        velocity = state[3]
+
+        velocity = self.env.unwrapped.state["velocity"]
+        
         dt = self.env.unwrapped.DELTA_TIME
         
         rewards = {
@@ -412,8 +410,8 @@ class CombinedReward(gymnasium.Wrapper):
         
         goal_reached = False
         if terminated:
-            state = self.env.unwrapped.state
-            goal_dist = np.linalg.norm(state[:2] - self.env.goal_pos)
+            ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+            goal_dist = np.linalg.norm(ego_pos - self.env.goal_pos)
             goal_reached = goal_dist <= self.env.goal_radius
         
         if terminated and not goal_reached:

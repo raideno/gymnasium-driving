@@ -38,6 +38,7 @@ class BicycleCarEnv(gymnasium.Env):
     SCREEN_SIZE = (800, 800)
     
     # time passing when calling .step
+    # 0.1second = 100ms per step
     DELTA_TIME = 0.1
     
     def __init__(
@@ -213,15 +214,12 @@ class BicycleCarEnv(gymnasium.Env):
     def reset(self, seed: int | None = None, **kwargs) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         super().reset(seed=seed)
 
-        self.state = np.array(
-            [
-                self.spawn_pos[0],
-                self.spawn_pos[1],
-                self.spawn_heading,
-                0.0,
-            ],
-            dtype=np.float32,
-        )
+        self.state = {
+            'x': self.spawn_pos[0],
+            'y': self.spawn_pos[1],
+            'yaw': self.spawn_heading,
+            'velocity': 0.0,
+        }
         
         self.simulation_time = 0.0
         for obstacle in self.obstacles:
@@ -250,9 +248,13 @@ class BicycleCarEnv(gymnasium.Env):
     ]:
         assert len(action) == 4, "Action must be of the form [steering, throttle, brake, reverse]"
         
-        self._episode_data['positions'].append(self.state[:2].copy())
-        self._episode_data['velocities'].append(float(self.state[3]))
-        self._episode_data['headings'].append(float(self.state[2]))
+        ego_pos = np.array([self.state["x"], self.state["y"]], dtype=np.float32)
+        ego_velocity = self.state["velocity"]
+        ego_heading = self.state["yaw"]
+        
+        self._episode_data['positions'].append(ego_pos.copy())
+        self._episode_data['velocities'].append(float(ego_velocity))
+        self._episode_data['headings'].append(float(ego_heading))
         self._episode_data['actions'].append(action.copy())
         self._episode_data['steering_angles'].append(float(action[0]))
         
@@ -264,19 +266,16 @@ class BicycleCarEnv(gymnasium.Env):
         direction = -1 if reverse else 1
         acceleration = direction * throttle * BicycleCarEnv.MAX_ACCELERATION
         # NOTE: braking
-        acceleration += (-brake * self.MAX_BRAKE_DECELERATION * np.sign(v)) if abs(v) > 1e-3 else 0.0
+        acceleration += (-brake * self.MAX_BRAKE_DECELERATION * np.sign(ego_velocity)) if abs(ego_velocity) > 1e-3 else 0.0
 
-        x, y, theta, v = self.state
-
-        new_state = self.model.compute_state(
-            x=float(x),
-            y=float(y),
-            yaw=float(theta),
+        self.state = self.model.compute_state(
+            x=float(self.state["x"]),
+            y=float(self.state["y"]),
+            yaw=float(self.state["yaw"]),
             steer=float(steering),
-            velocity=float(v),
+            velocity=float(self.state["velocity"]),
             acceleration=float(acceleration),
         )
-        self.state = np.array([new_state['x'], new_state['y'], new_state['yaw'], new_state['velocity']], dtype=np.float32)
         
         self.simulation_time += BicycleCarEnv.DELTA_TIME
         
@@ -292,7 +291,8 @@ class BicycleCarEnv(gymnasium.Env):
         truncated = False
         reward = 0.0
         
-        goal_dist = np.linalg.norm(self.state[:2] - self.goal_pos)
+        ego_pos = np.array([self.state["x"], self.state["y"]], dtype=np.float32)
+        goal_dist = np.linalg.norm(ego_pos - self.goal_pos)
         if goal_dist <= self.goal_radius:
             terminated = True
         elif self._check_collision():
@@ -300,7 +300,7 @@ class BicycleCarEnv(gymnasium.Env):
         elif not self._within_world_boundaries():
             truncated = True
         elif self.road_network is not None:
-            if self.road_network.is_off_road(self.state[:2]):
+            if self.road_network.is_off_road(ego_pos):
                 if self.enforce_road:
                     terminated = True
         
@@ -313,7 +313,7 @@ class BicycleCarEnv(gymnasium.Env):
         return {}
         
     def _get_car_corners(self) -> np.ndarray:
-        x, y, theta, _ = self.state
+        x, y, theta, _ = self.state["x"], self.state["y"], self.state["yaw"], self.state["velocity"]
         half_length = BicycleCarEnv.CAR_LENGTH / 2
         half_width = BicycleCarEnv.CAR_WIDTH / 2
         
@@ -353,7 +353,7 @@ class BicycleCarEnv(gymnasium.Env):
                     return True
         
         # center point vs obstacles
-        center = self.state[:2]
+        center = np.array([self.state["x"], self.state["y"]], dtype=np.float32)
         for obs in self.obstacles:
             if obs.check_collision(center):
                 return True
@@ -379,7 +379,7 @@ class BicycleCarEnv(gymnasium.Env):
         Checks whether the vehicle is withing the rectangular area defined by `world_origin`
         and `world_size`. This area includes everything that could be rendered (spawn, goal, obstacles, etc).
         """
-        x, y = self.state[:2]
+        x, y = self.state["x"], self.state["y"]
         min_x, min_y = self.world_origin
         max_x, max_y = min_x + self.world_size[0], min_y + self.world_size[1]
         return min_x <= x <= max_x and min_y <= y <= max_y

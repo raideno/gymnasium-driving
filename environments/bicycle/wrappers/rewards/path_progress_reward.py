@@ -39,12 +39,14 @@ class PathProgressReward(gymnasium.Wrapper):
 
     def step(self, action):
         observation, _reward, terminated, truncated, info = self.env.step(action)
-
-        state = self.env.unwrapped.state
         
         ego_position = state[:2]
         heading = state[2]
         velocity = state[3]
+        
+        ego_position = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        heading = self.env.unwrapped.state["yaw"]
+        velocity = self.env.unwrapped.state["velocity"]
 
         path = self.env.unwrapped.path
         reward = 0.0

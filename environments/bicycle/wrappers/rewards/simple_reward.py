@@ -23,7 +23,7 @@ class SimpleRewardWrapper(gymnasium.RewardWrapper):
         self.off_road_penalty = off_road_penalty
     
     def reward(self, reward: float) -> float:
-        ego_position = self.env.unwrapped.state[:2]
+        ego_position = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
         
         goal_distance = np.linalg.norm(ego_position - self.env.goal_pos)
         if goal_distance <= self.env.goal_radius:

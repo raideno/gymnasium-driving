@@ -27,7 +27,8 @@ def evaluate(model, env, num_episodes: int = 5, save_gif: bool = True):
             if terminated or truncated:
                 break
 
-        vel = env.unwrapped.state[3]
+        vel = env.unwrapped.state["velocity"]
+        
         all_rewards.append(total_reward)
         all_steps.append(steps)
         print(f"    ep {ep + 1:>2d}:  steps={steps:>4d}  reward={total_reward:>8.1f}  "
@@ -44,9 +45,12 @@ def evaluate(model, env, num_episodes: int = 5, save_gif: bool = True):
     for _ in range(1500):
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
-        state = env.unwrapped.state
-        positions.append(state[:2].copy())
-        velocities.append(state[3])
+        
+        ego_pos = np.array([env.unwrapped.state["x"], env.unwrapped.state["y"]], dtype=np.float32)
+        ego_velocity = env.unwrapped.state["yaw"]
+        
+        positions.append(ego_pos.copy())
+        velocities.append(ego_velocity)
 
         frame = env.render()
         if frame is not None:

@@ -62,9 +62,8 @@ class WithPathInfo(gymnasium.ObservationWrapper):
         self._path_length = 0.0
     
     def observation(self, observation: dict) -> dict:
-        state = self.env.unwrapped.state
-        ego_pos = state[:2]
-        ego_heading = state[2]
+        ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        ego_heading = self.env.unwrapped.state["yaw"]
         
         path = self.env.unwrapped.path
         
