@@ -26,10 +26,13 @@ class BicycleCarEnv(gymnasium.Env):
     
     # meters, m/s, m/s^2
     WHEELBASE = 2.5
-    MAX_STEERING = np.pi / 4
     MAX_VELOCITY = 15.0  # ~54 km/h
     MAX_ACCELERATION = 3.0
     MAX_BRAKE_DECELERATION = 6.0  # ~0.6g braking
+    
+    MIN_STEERING, MAX_STEERING = -np.pi / 4, np.pi / 4
+    MIN_THROTTLE, MAX_THROTTLE = 0, 1
+    MIN_BRAKE, MAX_BRAKE = 0, 1
     
     SCREEN_SIZE = (800, 800)
     
@@ -73,7 +76,7 @@ class BicycleCarEnv(gymnasium.Env):
 
         # [steering, throttle, brake, reverse]
         self.action_space = gymnasium.spaces.Box(
-            low=np.array([-BicycleCarEnv.MAX_STEERING, 0.0, 0.0, 0.0], dtype=np.float32),
+            low=np.array([BicycleCarEnv.MIN_STEERING, 0.0, 0.0, 0.0], dtype=np.float32),
             high=np.array([BicycleCarEnv.MAX_STEERING, 1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
@@ -251,9 +254,9 @@ class BicycleCarEnv(gymnasium.Env):
         self._episode_data['actions'].append(action.copy())
         self._episode_data['steering_angles'].append(float(action[0]))
         
-        steering = np.clip(action[0], -BicycleCarEnv.MAX_STEERING, BicycleCarEnv.MAX_STEERING)
-        throttle = np.clip(action[1], 0.0, 1.0)
-        brake = np.clip(action[2], 0.0, 1.0)
+        steering = np.clip(action[0], BicycleCarEnv.MIN_STEERING, BicycleCarEnv.MAX_STEERING)
+        throttle = np.clip(action[1], BicycleCarEnv.MIN_THROTTLE, BicycleCarEnv.MAX_THROTTLE)
+        brake = np.clip(action[2], BicycleCarEnv.MIN_BRAKE, BicycleCarEnv.MAX_BRAKE)
         reverse = (action[3] != 0.0)
         
         direction = -1 if reverse else 1

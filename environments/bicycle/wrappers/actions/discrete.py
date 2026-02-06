@@ -38,11 +38,11 @@ class DiscreteActionWrapper(gymnasium.ActionWrapper):
             8: np.array([max_steer, 0.0, 0.5, 0.0], dtype=np.float32),  # hard right + brake
         }
     
-    def action(self, action: int) -> np.ndarray:
+    def action(self, action) -> np.ndarray:
         """
         Convert discrete action to continuous [steering, throttle, brake, reverse].
         """
-        return self.action_map[action]
+        return self.action_map[int(action)]
 
 class MultiDiscreteActionWrapper(gymnasium.ActionWrapper):
     """
@@ -119,11 +119,11 @@ class CoarseDiscreteActionWrapper(gymnasium.ActionWrapper):
             4: np.array([max_steer * 0.4, 0.4, 0.0, 0.0], dtype=np.float32),  # right
         }
     
-    def action(self, action: int) -> np.ndarray:
+    def action(self, action) -> np.ndarray:
         """
         Convert discrete action to continuous [steering, throttle, brake, reverse].
         """
-        return self.action_map[action]
+        return self.action_map[int(action)]
 
 
 class FlattenMultiDiscreteWrapper(gymnasium.ActionWrapper):

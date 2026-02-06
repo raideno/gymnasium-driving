@@ -90,7 +90,8 @@ class WithPathInfo(gymnasium.ObservationWrapper):
             path_direction = np.array([1.0, 0.0])
         path_heading = np.arctan2(path_direction[1], path_direction[0])
         to_ego = ego_pos - closest_point
-        cross = np.cross(path_direction, to_ego)
+        # Manual 2D cross product to avoid numpy shape issues
+        cross = float(path_direction[0] * to_ego[1] - path_direction[1] * to_ego[0])
         cte = cross / (np.linalg.norm(path_direction) + 1e-6)
         
         # NOTE: heading error

@@ -19,14 +19,16 @@ from .observations import (
 
 from .rewards import (
     CombinedReward,
-    SimpleRewardWrapper
+    SimpleRewardWrapper,
+    PathProgressReward,
 )
 
 from .actions import (
     DiscreteActionWrapper,
     MultiDiscreteActionWrapper,
     CoarseDiscreteActionWrapper,
-    FlattenMultiDiscreteWrapper
+    FlattenMultiDiscreteWrapper,
+    ContinuousActionWrapper,
 )
 
 __all__ = [
@@ -44,10 +46,12 @@ __all__ = [
     # Reward wrappers
     "CombinedReward",
     "SimpleRewardWrapper",
+    "PathProgressReward",
     
     # Actions
     "DiscreteActionWrapper",
     "MultiDiscreteActionWrapper",
     "CoarseDiscreteActionWrapper",
-    "FlattenMultiDiscreteWrapper"
+    "FlattenMultiDiscreteWrapper",
+    "ContinuousActionWrapper",
 ]
