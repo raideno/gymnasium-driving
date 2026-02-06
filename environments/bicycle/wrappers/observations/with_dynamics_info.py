@@ -67,7 +67,7 @@ class WithDynamicsInfo(gymnasium.ObservationWrapper):
             self._heading_history.pop(0)
         
         # Compute derivatives
-        dt = self.env.unwrapped.dt
+        dt = self.env.unwrapped.DELTA_TIME
         
         # longitudinal acceleration
         if len(self._velocity_history) >= 2:

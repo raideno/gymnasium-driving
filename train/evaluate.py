@@ -94,7 +94,7 @@ def evaluate(model, env, num_episodes: int = 5, save_gif: bool = True):
     ax.set_aspect("equal")
 
     ax = axes[1]
-    time_axis = np.arange(len(velocities)) * env.unwrapped.dt
+    time_axis = np.arange(len(velocities)) * env.unwrapped.DELTA_TIME
     ax.plot(time_axis, velocities)
     ax.axhline(5.0, ls="--", color="gray", alpha=0.5, label="target 5 m/s")
     ax.set_xlabel("Time (s)")

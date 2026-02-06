@@ -250,7 +250,7 @@ class CombinedReward(gymnasium.Wrapper):
             
             # Obstacle velocity
             if i in self._prev_obstacle_positions:
-                obs_vel = (obs_center - self._prev_obstacle_positions[i]) / self.env.dt
+                obs_vel = (obs_center - self._prev_obstacle_positions[i]) / self.env.unwrapped.DELTA_TIME
             else:
                 obs_vel = np.zeros(2)
             self._prev_obstacle_positions[i] = obs_center.copy()
@@ -366,7 +366,7 @@ class CombinedReward(gymnasium.Wrapper):
         steering = action[0]
         state = self.env.unwrapped.state
         velocity = state[3]
-        dt = self.env.dt
+        dt = self.env.unwrapped.DELTA_TIME
         
         rewards = {
             "steering_rate": 0.0,

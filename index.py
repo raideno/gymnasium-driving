@@ -82,7 +82,7 @@ for i in range(500):
         path=env.path,
         obstacles=env.obstacles,
         road_network=env.road_network,
-        dt=env.dt,
+        dt=env.unwrapped.DELTA_TIME,
         max_steering=env.max_steering,
         max_acceleration=env.max_acceleration,
     )

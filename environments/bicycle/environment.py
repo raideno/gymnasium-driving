@@ -18,7 +18,7 @@ class BicycleCarEnv(gymnasium.Env):
 
     All dimensions are in meters, velocities in m/s.
     """
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
+    metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
 
     # in meters
     CAR_LENGTH = 4.5
@@ -37,9 +37,12 @@ class BicycleCarEnv(gymnasium.Env):
     
     SCREEN_SIZE = (800, 800)
     
+    # time passing when calling .step
+    DELTA_TIME = 0.1
+    
     def __init__(
         self,
-        render_mode: typing.Literal["human", "rgb_array"] | None = None,
+        render_mode: typing.Literal["rgb_array"] | None = None,
         # (position (x, y), heading in radians)
         spawn: typing.Tuple[typing.Tuple[float, float], float] = ((10.0, 10.0), 0.0),
         # (position (x, y), radius in meters)
@@ -49,9 +52,6 @@ class BicycleCarEnv(gymnasium.Env):
         # TODO: enforce road should be encoded in the road network itself not here
         enforce_road: bool = False,
         solid_road_borders: bool = False,
-        
-        # Simulation
-        dt: float = 0.1,
     ):
         super().__init__()
 
@@ -59,11 +59,10 @@ class BicycleCarEnv(gymnasium.Env):
 
         self.goal_pos, self.goal_radius = goal
         
-        self.dt = dt
         self.model = KinematicBicycleModel(
             wheelbase=BicycleCarEnv.WHEELBASE,
             max_steer=BicycleCarEnv.MAX_STEERING,
-            delta_time=self.dt,
+            delta_time=BicycleCarEnv.DELTA_TIME,
         )
 
         self.obstacles = obstacles if obstacles else []
@@ -91,7 +90,7 @@ class BicycleCarEnv(gymnasium.Env):
 
         self.state = None
         
-        self.path = self._compute_global_path()  # Will store waypoints as (N, 2) array
+        self._compute_global_path()  # Will store waypoints as (N, 2) array
 
         self._episode_data = {
             'actions': [],
@@ -209,7 +208,7 @@ class BicycleCarEnv(gymnasium.Env):
             [self.spawn_pos]
         ])
         
-        return self.path
+        return
 
     def reset(self, seed: int | None = None, **kwargs) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         super().reset(seed=seed)
@@ -241,9 +240,6 @@ class BicycleCarEnv(gymnasium.Env):
         observation = self._get_observation()
         info = None
 
-        if self.render_mode == "human":
-            self._render_frame()
-
         return observation, info
 
     def step(
@@ -267,6 +263,8 @@ class BicycleCarEnv(gymnasium.Env):
         
         direction = -1 if reverse else 1
         acceleration = direction * throttle * BicycleCarEnv.MAX_ACCELERATION
+        # NOTE: braking
+        acceleration += (-brake * self.MAX_BRAKE_DECELERATION * np.sign(v)) if abs(v) > 1e-3 else 0.0
 
         x, y, theta, v = self.state
 
@@ -278,24 +276,9 @@ class BicycleCarEnv(gymnasium.Env):
             velocity=float(v),
             acceleration=float(acceleration),
         )
-
-        x_new = new_state['x']
-        y_new = new_state['y']
-        theta_new = new_state['yaw']
-        v_new = new_state['velocity']
-
-        if brake > 0.0 and abs(v_new) > 0.01:
-            brake_decel = brake * BicycleCarEnv.MAX_BRAKE_DECELERATION * self.dt
-            if v_new > 0:
-                v_new = max(0.0, v_new - brake_decel)
-            else:
-                v_new = min(0.0, v_new + brake_decel)
-
-        v_new = np.clip(v_new, -BicycleCarEnv.MAX_VELOCITY, BicycleCarEnv.MAX_VELOCITY)
-
-        self.state = np.array([x_new, y_new, theta_new, v_new], dtype=np.float32)
+        self.state = np.array([new_state['x'], new_state['y'], new_state['yaw'], new_state['velocity']], dtype=np.float32)
         
-        self.simulation_time += self.dt
+        self.simulation_time += BicycleCarEnv.DELTA_TIME
         
         for obstacle in self.obstacles:
             obstacle.update(self.simulation_time)
@@ -323,9 +306,6 @@ class BicycleCarEnv(gymnasium.Env):
         
         self._episode_data['terminated'] = terminated
         self._episode_data['truncated'] = truncated
-
-        if self.render_mode == "human":
-            self._render_frame()
 
         return observation, reward, terminated, truncated, info
 
@@ -406,12 +386,9 @@ class BicycleCarEnv(gymnasium.Env):
 
     def render(self) -> np.ndarray | None:
         if self.render_mode == "rgb_array":
-            return self._render_frame()
+            return self.renderer.render_frame(self)
         return None
     
-    def _render_frame(self) -> np.ndarray | None:
-	    return self.renderer.render_frame(self)
-        
     def get_episode_data(self) -> dict[str, typing.Any]:
         return {
             **self._episode_data,
