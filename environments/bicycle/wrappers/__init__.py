@@ -19,6 +19,7 @@ from .observations import (
 
 from .rewards import (
     CombinedReward,
+    SimpleRewardWrapper
 )
 
 from .actions import (
@@ -42,6 +43,7 @@ __all__ = [
     
     # Reward wrappers
     "CombinedReward",
+    "SimpleRewardWrapper",
     
     # Actions
     "DiscreteActionWrapper",

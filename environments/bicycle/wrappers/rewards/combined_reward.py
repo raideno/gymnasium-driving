@@ -9,7 +9,7 @@ import typing
 import numpy as np
 import gymnasium
 
-
+# TODO: make it into a RewardWrapper, why did we use a general Wrapper ?
 class CombinedReward(gymnasium.Wrapper):
     """
     Combined reward wrapper that aggregates multiple reward components.
