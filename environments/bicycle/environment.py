@@ -2,6 +2,7 @@ import typing
 import gymnasium
 
 import numpy as np
+from kbm import KinematicBicycleModel
 
 from .components.obstacles import *
 
@@ -59,6 +60,11 @@ class BicycleCarEnv(gymnasium.Env):
         self.goal_pos, self.goal_radius = goal
         
         self.dt = dt
+        self.model = KinematicBicycleModel(
+            wheelbase=BicycleCarEnv.WHEELBASE,
+            max_steer=BicycleCarEnv.MAX_STEERING,
+            delta_time=self.dt,
+        )
 
         self.obstacles = obstacles if obstacles else []
         self.road_network = road_network
@@ -264,21 +270,28 @@ class BicycleCarEnv(gymnasium.Env):
 
         x, y, theta, v = self.state
 
-        x_new = x + v * np.cos(theta) * self.dt
-        y_new = y + v * np.sin(theta) * self.dt
-        theta_new = theta + (v / BicycleCarEnv.WHEELBASE) * np.tan(steering) * self.dt
-        v_new = v + acceleration * self.dt
-        
+        new_state = self.model.compute_state(
+            x=float(x),
+            y=float(y),
+            yaw=float(theta),
+            steer=float(steering),
+            velocity=float(v),
+            acceleration=float(acceleration),
+        )
+
+        x_new = new_state['x']
+        y_new = new_state['y']
+        theta_new = new_state['yaw']
+        v_new = new_state['velocity']
+
         if brake > 0.0 and abs(v_new) > 0.01:
             brake_decel = brake * BicycleCarEnv.MAX_BRAKE_DECELERATION * self.dt
             if v_new > 0:
                 v_new = max(0.0, v_new - brake_decel)
             else:
                 v_new = min(0.0, v_new + brake_decel)
-        
-        v_new = np.clip(v_new, -BicycleCarEnv.MAX_VELOCITY, BicycleCarEnv.MAX_VELOCITY)
 
-        theta_new = np.arctan2(np.sin(theta_new), np.cos(theta_new))
+        v_new = np.clip(v_new, -BicycleCarEnv.MAX_VELOCITY, BicycleCarEnv.MAX_VELOCITY)
 
         self.state = np.array([x_new, y_new, theta_new, v_new], dtype=np.float32)
         
