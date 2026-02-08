@@ -3,7 +3,7 @@ import pygame
 
 import numpy as np
 
-import environment.components.constants as constants
+import gymnasium_driving.components.constants as constants
 
 class Renderer:
     def __init__(

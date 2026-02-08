@@ -3,6 +3,8 @@
 
 .DS_Store
 
+outputs
+
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/

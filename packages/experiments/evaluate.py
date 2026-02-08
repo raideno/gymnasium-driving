@@ -5,9 +5,8 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from metrics.cross_track_error import compute_cross_track_error
-from metrics.steering_smoothness import compute_steering_smoothness
-
+from src.metrics.cross_track_error import compute_cross_track_error
+from src.metrics.steering_smoothness import compute_steering_smoothness
 
 def compute_episode_metrics(env, target_velocity: float = 5.0) -> dict:
     """Compute all metrics from the recorder data."""

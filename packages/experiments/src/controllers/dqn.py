@@ -6,10 +6,10 @@ class DQNController:
     """
     def __init__(
         self,
-        env,
+        environment,
         **kwargs
     ):
-        self.env = env
+        self.env = environment
         
         # TODO: why can't we use MlpPolicy when using dict observation space ?
         # MlpPolicy accepts only one input / one dimension observations ?
@@ -21,7 +21,7 @@ class DQNController:
             **kwargs.get("model_kwargs", {})
         )
         
-    def train(
+    def learn(
         self,
         **kwargs
     ):
@@ -33,6 +33,16 @@ class DQNController:
         return self
     
     def get_action(
+        self,
+        observation,
+        **kwargs
+    ):
+        return self.model.predict(
+            observation,
+            deterministic=True
+        )
+        
+    def predict(
         self,
         observation,
         **kwargs

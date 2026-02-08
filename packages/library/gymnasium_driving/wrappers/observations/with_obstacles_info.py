@@ -3,7 +3,7 @@ import gymnasium
 
 import numpy as np
 
-from ...components.obstacles import Obstacle, Circle, Rectangle
+from gymnasium_driving.components.obstacles import Obstacle, Circle, Rectangle
 
 class WithObstaclesInfo(gymnasium.ObservationWrapper):
     """

@@ -29,7 +29,7 @@ class Tentacle:
 class ClothoidTentaclesController:
     def __init__(
         self,
-        env,
+        environment,
         num_tentacles: int = 41,
         t0: float = 7.0,           # Time horizon constant (seconds)
         l0: float = 5.0,           # Length offset constant (meters)
@@ -47,7 +47,7 @@ class ClothoidTentaclesController:
         target_velocity: float = 6.0,
         **kwargs,
     ):
-        self.env = env
+        self.env = environment
         self.num_tentacles = num_tentacles
         self.t0 = t0
         self.l0 = l0
@@ -80,7 +80,7 @@ class ClothoidTentaclesController:
         
         self.road_network=env.unwrapped.road_network
         
-    def train(self, **kwargs):
+    def learn(self, **kwargs):
         return self
     
     def _compute_tentacle_length(self, velocity: float) -> float:
@@ -703,6 +703,9 @@ class ClothoidTentaclesController:
         accel_action = (accel_normalized + 1.0) / 2.0  # Convert [-1, 1] to [0, 1]
         
         return np.array([steering, accel_action, 0.0, 0.0], dtype=np.float32), None
+    
+    def predict(self, observation: dict, **kwargs) -> np.ndarray:
+        return self.get_action(observation, **kwargs)
     
     def draw_debug(
         self,

@@ -3,6 +3,7 @@ import numpy as np
 class PurePursuitController:
     def __init__(
         self,
+        environment,
         lookahead_distance: float = 5.0,
         wheelbase: float = 2.5,
         target_velocity: float = 5.0,
@@ -11,6 +12,7 @@ class PurePursuitController:
         max_acceleration: float = 3.0,
         **kwargs,
     ):
+        self.env = environment
         self.lookahead_distance = lookahead_distance
         self.wheelbase = wheelbase
         self.target_velocity = target_velocity
@@ -120,7 +122,10 @@ class PurePursuitController:
 
         return np.array([steering, throttle, 0.0, 0.0], dtype=np.float32), None
         
-    def train(self, **kwargs):
+    def predict(self, observation: dict, **kwargs):
+        return self.get_action(observation, **kwargs)
+    
+    def learn(self, **kwargs):
         return self
     
     def draw_debug(self, env, observation: dict) -> None:

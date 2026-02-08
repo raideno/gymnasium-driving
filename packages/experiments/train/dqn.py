@@ -1,7 +1,7 @@
 from stable_baselines3 import DQN
 from stable_baselines3.common.monitor import Monitor
 
-from evaluate import evaluate
+from ..evaluate import evaluate
 from premade_environment import make_environment
 
 def main():

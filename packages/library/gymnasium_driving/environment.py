@@ -2,18 +2,19 @@ import typing
 import gymnasium
 
 import numpy as np
-from kbm import KinematicBicycleModel
 
-from .components.obstacles import *
+from gymnasium_driving.components.obstacles import Circle, Rectangle
+from gymnasium_driving.components.roads import RoadNetwork
 
-from .components.roads import *
+from gymnasium_driving.components.renderer import Renderer
+from gymnasium_driving.components.overlay import OverlayManager
+from gymnasium_driving.components.performance import PerformanceTracker
+from gymnasium_driving.components.recorder import EpisodeRecorder, StepData
 
-from .components.renderer import Renderer
-from .components.overlay import OverlayManager
-from .components.performance import PerformanceTracker
-from .components.recorder import EpisodeRecorder, StepData
+from gymnasium_driving.models.bicycle import BicycleModel
+from gymnasium_driving.models.ackerman import AckermannModel
 
-class BicycleCarEnv(gymnasium.Env):
+class CarEnvironment(gymnasium.Env):
     """
     A bicycle kinematic model environment with proper meter-based scaling.
 
@@ -52,6 +53,7 @@ class BicycleCarEnv(gymnasium.Env):
     def __init__(
         self,
         render_mode: typing.Literal["rgb_array"] | None = None,
+        model: typing.Literal["bicycle", "ackerman"] = "bicycle",
         # (position (x, y), heading in radians)
         spawn: typing.Tuple[typing.Tuple[float, float], float] = ((10.0, 10.0), 0.0),
         # (position (x, y), radius in meters)
@@ -65,12 +67,22 @@ class BicycleCarEnv(gymnasium.Env):
 
         self.goal_pos, self.goal_radius = goal
         
-        self.model = KinematicBicycleModel(
-            wheelbase=BicycleCarEnv.WHEELBASE,
-            max_steer=BicycleCarEnv.MAX_STEERING,
-            delta_time=BicycleCarEnv.DELTA_TIME,
-        )
-
+        if model == "bicycle":
+            self.model = BicycleModel(
+                wheelbase=CarEnvironment.WHEELBASE,
+                max_steer=CarEnvironment.MAX_STEERING,
+                delta_time=CarEnvironment.DELTA_TIME,
+            )
+        elif model == "ackerman":
+            self.model = AckermannModel(
+                wheelbase=CarEnvironment.WHEELBASE,
+                track_width=CarEnvironment.CAR_WIDTH,
+                max_steer=CarEnvironment.MAX_STEERING,
+                delta_time=CarEnvironment.DELTA_TIME,
+            )
+        else:
+            raise ValueError(f"Unsupported model type: {model}")
+        
         self.obstacles = obstacles if obstacles else []
         self.road_network = road_network
 
@@ -79,14 +91,14 @@ class BicycleCarEnv(gymnasium.Env):
         self.render_mode = render_mode
 
         margin_x, margin_y = 40, 40
-        scale_x = (BicycleCarEnv.SCREEN_SIZE[0] - margin_x) / self.world_size[0]
-        scale_y = (BicycleCarEnv.SCREEN_SIZE[1] - margin_y) / self.world_size[1]
+        scale_x = (CarEnvironment.SCREEN_SIZE[0] - margin_x) / self.world_size[0]
+        scale_y = (CarEnvironment.SCREEN_SIZE[1] - margin_y) / self.world_size[1]
         self.pixels_per_meter = min(scale_x, scale_y)
 
         # [steering, throttle, brake, reverse]
         self.action_space = gymnasium.spaces.Box(
-            low=np.array([BicycleCarEnv.MIN_STEERING, 0.0, 0.0, 0.0], dtype=np.float32),
-            high=np.array([BicycleCarEnv.MAX_STEERING, 1.0, 1.0, 1.0], dtype=np.float32),
+            low=np.array([CarEnvironment.MIN_STEERING, 0.0, 0.0, 0.0], dtype=np.float32),
+            high=np.array([CarEnvironment.MAX_STEERING, 1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -100,7 +112,7 @@ class BicycleCarEnv(gymnasium.Env):
         self.overlay_manager = OverlayManager()
         self.performance_tracker = PerformanceTracker(show_performance=True)
         self.renderer = Renderer(
-            screen_size=BicycleCarEnv.SCREEN_SIZE,
+            screen_size=CarEnvironment.SCREEN_SIZE,
             render_mode=render_mode,
             render_fps=self.metadata["render_fps"],
         )
@@ -144,8 +156,8 @@ class BicycleCarEnv(gymnasium.Env):
             max_x, max_y = max(max_x, bounds[2]), max(max_y, bounds[3])
 
         # padding
-        min_x, min_y = min_x - BicycleCarEnv.WORLD_PADDING, min_y - BicycleCarEnv.WORLD_PADDING
-        max_x, max_y = max_x + BicycleCarEnv.WORLD_PADDING, max_y + BicycleCarEnv.WORLD_PADDING
+        min_x, min_y = min_x - CarEnvironment.WORLD_PADDING, min_y - CarEnvironment.WORLD_PADDING
+        max_x, max_y = max_x + CarEnvironment.WORLD_PADDING, max_y + CarEnvironment.WORLD_PADDING
 
         world_size = np.array([max_x - min_x, max_y - min_y], dtype=np.float32)
         world_origin = np.array([min_x, min_y], dtype=np.float32)
@@ -166,7 +178,7 @@ class BicycleCarEnv(gymnasium.Env):
 
         screen_x = int(local_position[0] * self.pixels_per_meter) + 20
         screen_y = int(
-            BicycleCarEnv.SCREEN_SIZE[1] - local_position[1] * self.pixels_per_meter - 20
+            CarEnvironment.SCREEN_SIZE[1] - local_position[1] * self.pixels_per_meter - 20
         )
 
         return (screen_x, screen_y)
@@ -251,13 +263,13 @@ class BicycleCarEnv(gymnasium.Env):
             reverse=bool(action[3]),
         ))
         
-        steering = np.clip(action[0], BicycleCarEnv.MIN_STEERING, BicycleCarEnv.MAX_STEERING)
-        throttle = np.clip(action[1], BicycleCarEnv.MIN_THROTTLE, BicycleCarEnv.MAX_THROTTLE)
-        brake = np.clip(action[2], BicycleCarEnv.MIN_BRAKE, BicycleCarEnv.MAX_BRAKE)
+        steering = np.clip(action[0], CarEnvironment.MIN_STEERING, CarEnvironment.MAX_STEERING)
+        throttle = np.clip(action[1], CarEnvironment.MIN_THROTTLE, CarEnvironment.MAX_THROTTLE)
+        brake = np.clip(action[2], CarEnvironment.MIN_BRAKE, CarEnvironment.MAX_BRAKE)
         reverse = (action[3] != 0.0)
         
         direction = -1 if reverse else 1
-        acceleration = direction * throttle * BicycleCarEnv.MAX_ACCELERATION
+        acceleration = direction * throttle * CarEnvironment.MAX_ACCELERATION
         # NOTE: braking
         acceleration += (-brake * self.MAX_BRAKE_DECELERATION * np.sign(ego_velocity)) if abs(ego_velocity) > 1e-3 else 0.0
 
@@ -273,11 +285,11 @@ class BicycleCarEnv(gymnasium.Env):
         # NOTE: enforce velocity limits
         self.state["velocity"] = np.clip(
             self.state["velocity"],
-            BicycleCarEnv.MIN_VELOCITY,
-            BicycleCarEnv.MAX_VELOCITY
+            CarEnvironment.MIN_VELOCITY,
+            CarEnvironment.MAX_VELOCITY
         )
         
-        self.simulation_time += BicycleCarEnv.DELTA_TIME
+        self.simulation_time += CarEnvironment.DELTA_TIME
         
         for obstacle in self.obstacles:
             obstacle.update(self.simulation_time)
@@ -308,8 +320,8 @@ class BicycleCarEnv(gymnasium.Env):
         
     def _get_car_corners(self) -> np.ndarray:
         x, y, theta, _ = self.state["x"], self.state["y"], self.state["yaw"], self.state["velocity"]
-        half_length = BicycleCarEnv.CAR_LENGTH / 2
-        half_width = BicycleCarEnv.CAR_WIDTH / 2
+        half_length = CarEnvironment.CAR_LENGTH / 2
+        half_width = CarEnvironment.CAR_WIDTH / 2
         
         corners_local = np.array([
             # front-right

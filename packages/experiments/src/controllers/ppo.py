@@ -6,10 +6,10 @@ class PPOController:
     """
     def __init__(
         self,
-        env,
+        environment,
         **kwargs,
     ):
-        self.env = env
+        self.env = environment
         
         self.model = stable_baselines3.PPO(
             "MultiInputPolicy",
@@ -17,7 +17,7 @@ class PPOController:
             **kwargs.get("model_kwargs", {})
         )
         
-    def train(
+    def learn(
         self,
         **kwargs
     ):
@@ -27,6 +27,16 @@ class PPOController:
         return self
     
     def get_action(
+        self,
+        observation,
+        **kwargs
+    ):
+        return self.model.predict(
+            observation,
+            deterministic=True
+        )
+        
+    def predict(
         self,
         observation,
         **kwargs

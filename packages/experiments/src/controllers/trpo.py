@@ -6,10 +6,10 @@ class TRPOController:
     """
     def __init__(
         self,
-        env,
+        environment,
         **kwargs,
     ):
-        self.env = env
+        self.env = environment
         
         self.model = sb3_contrib.TRPO(
             "MultiInputPolicy",
@@ -17,7 +17,7 @@ class TRPOController:
             **kwargs.get("model_kwargs", {})
         )
         
-    def train(
+    def learn(
         self,
         **kwargs
     ):
@@ -36,3 +36,12 @@ class TRPOController:
             deterministic=True
         )
         
+    def predict(
+        self,
+        observation,
+        **kwargs
+    ):
+        return self.model.predict(
+            observation,
+            deterministic=True
+        )

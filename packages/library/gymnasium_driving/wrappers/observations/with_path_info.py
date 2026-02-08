@@ -9,7 +9,6 @@ import typing
 import numpy as np
 import gymnasium
 
-
 class WithPathInfo(gymnasium.ObservationWrapper):
     """
     Adds path following information to observations.
