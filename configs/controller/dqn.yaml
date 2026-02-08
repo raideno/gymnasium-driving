@@ -1,1 +1,10 @@
 _target_: src.controllers.dqn.DQNController
+model_kwargs:
+  learning_rate: 0.0001
+  buffer_size: 100_000
+  learning_starts: 10_000
+  batch_size: 64
+  gamma: 0.99
+  exploration_fraction: 0.3
+  exploration_final_eps: 0.05
+  verbose: 1

@@ -3,7 +3,7 @@ import gymnasium as gym
 import gymnasium_driving
 import gymnasium_driving.wrappers
     
-def make_environment(discrete: bool = True):
+def make_environment(discrete: bool):
     """
     Create the bicycle environment with the correct wrapper stack.
 

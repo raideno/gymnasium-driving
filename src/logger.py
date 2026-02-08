@@ -1,5 +1,6 @@
 from stable_baselines3.common.callbacks import BaseCallback
 
+# TODO: complete
 class MeticLogger(BaseCallback):
     def __init__(
         self,
@@ -13,6 +14,7 @@ class MeticLogger(BaseCallback):
         self.value_lossess=[]
 
     def _on_step(self) -> bool:
+        
         if self.n_calls % self.log_frequency == 0:
             if (self.verbose == 1):
                 print(f"iterations: {self.model.logger.name_to_value['train/n_updates']}")

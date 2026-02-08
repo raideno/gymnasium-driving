@@ -1,1 +1,2 @@
 _target_: src.environments.cristal.make_environment
+discrete: false
