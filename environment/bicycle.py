@@ -11,6 +11,7 @@ from .components.roads import *
 from .components.renderer import Renderer
 from .components.overlay import OverlayManager
 from .components.performance import PerformanceTracker
+from .components.recorder import EpisodeRecorder, StepData
 
 class BicycleCarEnv(gymnasium.Env):
     """
@@ -20,16 +21,23 @@ class BicycleCarEnv(gymnasium.Env):
     """
     metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
 
-    # in meters
-    CAR_LENGTH = 4.5
-    CAR_WIDTH = 1.8
     WORLD_PADDING = 10.0
     
-    # meters, m/s, m/s^2
+    CAR_LENGTH = 4.5
+    CAR_WIDTH = 1.8
     WHEELBASE = 2.5
-    MAX_VELOCITY = 15.0  # ~54 km/h
+    
+    MIN_VELOCITY = -5.0
+    MAX_VELOCITY = 5.0
+    
+    MIN_ACCELERATION = 0
     MAX_ACCELERATION = 3.0
-    MAX_BRAKE_DECELERATION = 6.0  # ~0.6g braking
+    
+    # NOTE: it prevents the car from sliding out the turn, when lateral acceleration exceeds the friction limit, the tires lose grip and the vehicle slide.
+    MAX_LATERAL_ACCELERATION = 4.0 # 4.0
+    
+    # when the brake pedal is fully pressed, the car decelerate at 6m/s^2
+    MAX_BRAKE_DECELERATION = 1.5 # 6.0
     
     MIN_STEERING, MAX_STEERING = -np.pi / 4, np.pi / 4
     MIN_THROTTLE, MAX_THROTTLE = 0, 1
@@ -50,9 +58,6 @@ class BicycleCarEnv(gymnasium.Env):
         goal: typing.Tuple[typing.Tuple[float, float], float] = ((90.0, 90.0), 3.0),
         obstacles: typing.List[typing.Union[Circle, Rectangle]] | None = None,
         road_network: RoadNetwork | None = None,
-        # TODO: enforce road should be encoded in the road network itself not here
-        enforce_road: bool = False,
-        solid_road_borders: bool = False,
     ):
         super().__init__()
 
@@ -68,8 +73,6 @@ class BicycleCarEnv(gymnasium.Env):
 
         self.obstacles = obstacles if obstacles else []
         self.road_network = road_network
-        self.enforce_road = enforce_road
-        self.solid_road_borders = solid_road_borders
 
         self.world_size, self.world_origin = self._calculate_world_bounds()
         self.world_size = np.array((100, 100))
@@ -93,16 +96,7 @@ class BicycleCarEnv(gymnasium.Env):
         
         self._compute_global_path()  # Will store waypoints as (N, 2) array
 
-        self._episode_data = {
-            'actions': [],
-            'positions': [],
-            'steering_angles': [],
-            'velocities': [],
-            'headings': [],
-            'terminated': False,
-            'truncated': False
-        }
-
+        self.recorder = EpisodeRecorder()
         self.overlay_manager = OverlayManager()
         self.performance_tracker = PerformanceTracker(show_performance=True)
         self.renderer = Renderer(
@@ -226,16 +220,10 @@ class BicycleCarEnv(gymnasium.Env):
             obstacle.reset()
         
         self.performance_tracker.reset()
+        
+        self.recorder.reset()
 
-        self._episode_data['actions'] = []
-        self._episode_data['positions'] = []
-        self._episode_data['steering_angles'] = []
-        self._episode_data['velocities'] = []
-        self._episode_data['headings'] = []
-        self._episode_data['terminated'] = False
-        self._episode_data['truncated'] = False
-
-        observation = self._get_observation()
+        observation = {}
         info = None
 
         return observation, info
@@ -250,13 +238,18 @@ class BicycleCarEnv(gymnasium.Env):
         
         ego_pos = np.array([self.state["x"], self.state["y"]], dtype=np.float32)
         ego_velocity = self.state["velocity"]
-        ego_heading = self.state["yaw"]
         
-        self._episode_data['positions'].append(ego_pos.copy())
-        self._episode_data['velocities'].append(float(ego_velocity))
-        self._episode_data['headings'].append(float(ego_heading))
-        self._episode_data['actions'].append(action.copy())
-        self._episode_data['steering_angles'].append(float(action[0]))
+        self.recorder.record(StepData(
+            timestamp=self.simulation_time,
+            position_x=self.state["x"],
+            position_y=self.state["y"],
+            velocity=self.state["velocity"],
+            heading=self.state["yaw"],
+            steering=float(action[0]),
+            throttle=float(action[1]),
+            brake=float(action[2]),
+            reverse=bool(action[3]),
+        ))
         
         steering = np.clip(action[0], BicycleCarEnv.MIN_STEERING, BicycleCarEnv.MAX_STEERING)
         throttle = np.clip(action[1], BicycleCarEnv.MIN_THROTTLE, BicycleCarEnv.MAX_THROTTLE)
@@ -277,6 +270,13 @@ class BicycleCarEnv(gymnasium.Env):
             acceleration=float(acceleration),
         )
         
+        # NOTE: enforce velocity limits
+        self.state["velocity"] = np.clip(
+            self.state["velocity"],
+            BicycleCarEnv.MIN_VELOCITY,
+            BicycleCarEnv.MAX_VELOCITY
+        )
+        
         self.simulation_time += BicycleCarEnv.DELTA_TIME
         
         for obstacle in self.obstacles:
@@ -284,7 +284,7 @@ class BicycleCarEnv(gymnasium.Env):
         
         self.performance_tracker.update()
 
-        observation = self._get_observation()
+        observation = {}
         info = {}
         
         terminated = False
@@ -301,16 +301,10 @@ class BicycleCarEnv(gymnasium.Env):
             truncated = True
         elif self.road_network is not None:
             if self.road_network.is_off_road(ego_pos):
-                if self.enforce_road:
+                if self.road_network.enforce_road:
                     terminated = True
         
-        self._episode_data['terminated'] = terminated
-        self._episode_data['truncated'] = truncated
-
         return observation, reward, terminated, truncated, info
-
-    def _get_observation(self) -> dict[str, typing.Any]:
-        return {}
         
     def _get_car_corners(self) -> np.ndarray:
         x, y, theta, _ = self.state["x"], self.state["y"], self.state["yaw"], self.state["velocity"]
@@ -358,7 +352,7 @@ class BicycleCarEnv(gymnasium.Env):
             if obs.check_collision(center):
                 return True
         
-        if self.solid_road_borders and self.road_network is not None:
+        if self.road_network is not None and self.road_network.solid_road_borders:
             # corners vs off-road
             for corner in corners:
                 if self.road_network.is_off_road(corner):
@@ -389,10 +383,5 @@ class BicycleCarEnv(gymnasium.Env):
             return self.renderer.render_frame(self)
         return None
     
-    def get_episode_data(self) -> dict[str, typing.Any]:
-        return {
-            **self._episode_data,
-        }
-
     def close(self) -> None:
         self.renderer.close()

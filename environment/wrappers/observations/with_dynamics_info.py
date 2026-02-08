@@ -106,12 +106,20 @@ class WithDynamicsInfo(gymnasium.ObservationWrapper):
         else:
             jerk = 0.0
         
+        # # steering rate
+        # steering_rate = 0.0
+        # if hasattr(self.env, '_episode_data'):
+        #     steering_angles = self.env.unwrapped._episode_data.get('steering_angles', [])
+        #     if len(steering_angles) >= 2:
+        #         steering_rate = (steering_angles[-1] - steering_angles[-2]) / dt
+        
         # steering rate
         steering_rate = 0.0
-        if hasattr(self.env, '_episode_data'):
-            steering_angles = self.env.unwrapped._episode_data.get('steering_angles', [])
-            if len(steering_angles) >= 2:
-                steering_rate = (steering_angles[-1] - steering_angles[-2]) / dt
+       
+        # TODO: this might be slow as we are converting to arrays every step.
+        steering_angles = self.env.unwrapped.recorder.to_arrays().get('steering_angles', [])
+        if len(steering_angles) >= 2:
+            steering_rate = (steering_angles[-1] - steering_angles[-2]) / dt
         
         dynamics = np.array([
             accel_long,

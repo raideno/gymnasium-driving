@@ -31,7 +31,7 @@ def compute_cross_track_error(
     
     Lower CTE_RMS values indicate superior path tracking accuracy.
     """
-    if not positions or len(reference_path) == 0:
+    if len(reference_path) == 0:
         return {
             'cte_rms': float('inf'),
             'cte_mean': float('inf'),

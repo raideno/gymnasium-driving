@@ -7,149 +7,146 @@ class PurePursuitController:
         wheelbase: float = 2.5,
         target_velocity: float = 5.0,
         kp_velocity: float = 1.0,
+        max_steering: float = np.pi / 4,
+        max_acceleration: float = 3.0,
+        **kwargs,
     ):
         self.lookahead_distance = lookahead_distance
         self.wheelbase = wheelbase
         self.target_velocity = target_velocity
         self.kp_velocity = kp_velocity
+        self.max_steering = max_steering
+        self.max_acceleration = max_acceleration
         
-    def find_lookahead_point(
-        self, 
-        position: np.ndarray, 
-        path: np.ndarray,
-        velocity: float
-    ) -> tuple[np.ndarray, int]:
+        self._lookahead_point_ego: np.ndarray | None = None
+        
+    def train(self, **kwargs):
+        return self
+    
+    def _find_lookahead_point_ego(self, waypoints_ego: np.ndarray) -> np.ndarray:
         """
-        Find the lookahead point on the path.
-        
         Args:
-            position: Current vehicle position (x, y)
-            path: Path waypoints as (N, 2) array
-            velocity: Current velocity (for adaptive lookahead)
-            
+            waypoints_ego: Waypoints in ego frame, shape (N, 3) with [x, y, curvature]
         Returns:
-            lookahead_point: The target point to steer towards
-            lookahead_idx: Index of the lookahead point in the path
+            Lookahead point [x, y] in ego frame
         """
-        car_to_waypoint_distances = np.linalg.norm(path - position, axis=1)
-        closest_idx = np.argmin(car_to_waypoint_distances)
-        
-        n_points = len(path)
+        # Waypoints are already ordered ahead of the vehicle
+        # Find the first waypoint beyond lookahead distance
         cumulative_dist = 0.0
-        lookahead_idx = closest_idx
+        prev_point = np.array([0.0, 0.0])  # Ego position in ego frame is origin
         
-        for i in range(n_points):
-            idx = (closest_idx + i) % n_points
-            next_idx = (closest_idx + i + 1) % n_points
+        for i, wp in enumerate(waypoints_ego):
+            point = wp[:2]  # [x, y]
             
-            segment_dist = np.linalg.norm(path[next_idx] - path[idx])
-            cumulative_dist += segment_dist
+            if i == 0:
+                dist = np.linalg.norm(point)
+            else:
+                dist = np.linalg.norm(point - prev_point)
+            
+            cumulative_dist += dist
             
             if cumulative_dist >= self.lookahead_distance:
-                lookahead_idx = next_idx
-                break
+                return point
+            
+            prev_point = point
         
-        return path[lookahead_idx], lookahead_idx
+        # If no waypoint is far enough, use the last one
+        return waypoints_ego[-1, :2]
     
-    def compute_steering(
-        self,
-        position: np.ndarray,
-        heading: float,
-        lookahead_point: np.ndarray
-    ) -> float:
-        dx = lookahead_point[0] - position[0]
-        dy = lookahead_point[1] - position[1]
+    def _compute_steering_ego(self, lookahead_point_ego: np.ndarray) -> float:
+        """
+        Compute steering angle from lookahead point in ego frame.
         
-        distance_to_lookahead = np.sqrt(dx**2 + dy**2)
-        if distance_to_lookahead < 0.1:
+        In ego frame, the vehicle is at origin facing +x direction.
+        This simplifies the Pure Pursuit formula.
+        
+        Args:
+            lookahead_point_ego: Target point [x, y] in ego frame
+            
+        Returns:
+            Steering angle in radians
+        """
+        dx, dy = lookahead_point_ego[0], lookahead_point_ego[1]
+        distance = np.sqrt(dx**2 + dy**2)
+        
+        if distance < 0.1:
             return 0.0
         
-        # Transform to vehicle coordinate frame
-        # Alpha is the angle between vehicle heading and lookahead point
-        lookahead_angle = np.arctan2(dy, dx)
-        alpha = lookahead_angle - heading
+        # In ego frame, alpha is simply arctan2(dy, dx) since heading is 0
+        alpha = np.arctan2(dy, dx)
         
-        # Normalize to [-pi, pi]
-        alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
-        
-        # delta = arctan(2 * L * sin(alpha) / distance_to_lookahead)
-        steering = np.arctan2(2.0 * self.wheelbase * np.sin(alpha), distance_to_lookahead)
+        # Pure Pursuit: delta = arctan(2 * L * sin(alpha) / distance)
+        steering = np.arctan2(2.0 * self.wheelbase * np.sin(alpha), distance)
         
         return steering
     
-    def compute_acceleration(self, current_velocity: float) -> float:
-        """
-        Simple proportional velocity controller.
-        
-        Args:
-            current_velocity: Current vehicle velocity
-            
-        Returns:
-            acceleration: Acceleration command
-        """
+    def _compute_acceleration(self, current_velocity: float) -> float:
+        """Proportional velocity controller."""
         velocity_error = self.target_velocity - current_velocity
         return self.kp_velocity * velocity_error
     
     def get_action(
         self,
         observation: dict,
-        path: np.ndarray,
-        max_steering: float = np.pi / 4,
-        max_acceleration: float = 3.0,
         **kwargs
     ) -> np.ndarray:
         """
         Compute control action from observation.
         
         Args:
-            observation: Environment observation dict
-            path: Path waypoints as (N, 2) array
-            max_steering: Maximum steering angle (for clipping)
-            max_acceleration: Maximum acceleration (for clipping)
+            observation: Environment observation dict with:
+                - base/velocity: Current velocity
+                - path/waypoints: Upcoming waypoints in ego frame (N, 3)
             
         Returns:
-            action: [steering, acceleration] array
+            Action array [steering, throttle, 0.0, 0.0]
         """
-        position = observation["position"]
-        heading = observation["heading"][0]
-        velocity = observation["velocity"][0]
+        velocity = observation["base/velocity"][0]
+        waypoints_ego = observation["path/waypoints"]  # Shape: (num_waypoints, 3)
         
-        lookahead_point, _ = self.find_lookahead_point(position, path, velocity)
+        # Find lookahead point in ego frame
+        self._lookahead_point_ego = self._find_lookahead_point_ego(waypoints_ego)
         
-        steering = self.compute_steering(position, heading, lookahead_point)
-        acceleration = self.compute_acceleration(velocity)
+        # Compute controls
+        steering = self._compute_steering_ego(self._lookahead_point_ego)
+        acceleration = self._compute_acceleration(velocity)
         
-        steering = np.clip(steering, -max_steering, max_steering)
-        acceleration = np.clip(acceleration, 0.0, max_acceleration)
+        # Clip to limits
+        steering = np.clip(steering, -self.max_steering, self.max_steering)
+        acceleration = np.clip(acceleration, 0.0, self.max_acceleration)
         
-        # Throttle: 0 = no acceleration, 1 = full acceleration (CARLA-compatible)
-        throttle = acceleration / max_acceleration
+        # Normalize throttle to [0, 1]
+        throttle = acceleration / self.max_acceleration
 
-        return np.array([steering, throttle, 0.0, 0.0], dtype=np.float32)
+        return np.array([steering, throttle, 0.0, 0.0], dtype=np.float32), None
         
-    def draw_debug(
-        self,
-        env,
-        observation: dict,
-        path: np.ndarray,
-    ) -> None:
-        position = observation["position"]
-        velocity = observation["velocity"][0]
+    def train(self, **kwargs):
+        return self
+    
+    def draw_debug(self, env, observation: dict) -> None:
+        """Draw debug visualization for the controller."""
+        if self._lookahead_point_ego is None:
+            return
         
-        lookahead_point, lookahead_idx = self.find_lookahead_point(
-            position, path, velocity
-        )
+        # Transform lookahead point from ego frame back to world frame for visualization
+        position = observation["base/position"]
+        heading = observation["base/heading"][0]
         
-        env.overlay_manager.add_circle(
-            center=tuple(lookahead_point),
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
+        
+        lookahead_world = rotation @ self._lookahead_point_ego + position
+        
+        env.unwrapped.overlay_manager.add_circle(
+            center=tuple(lookahead_world),
             radius=0.5,
             color=(255, 165, 0),
             width=0,
         )
         
-        env.overlay_manager.add_line(
+        env.unwrapped.overlay_manager.add_line(
             start=tuple(position),
-            end=tuple(lookahead_point),
+            end=tuple(lookahead_world),
             color=(255, 165, 0),
             width=2,
         )

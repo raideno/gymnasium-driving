@@ -1,9 +1,8 @@
+import scipy
 import typing
 import dataclasses
 
 import numpy as np
-
-from scipy import integrate
 
 @dataclasses.dataclass
 class Tentacle:
@@ -30,16 +29,12 @@ class Tentacle:
 class ClothoidTentaclesController:
     def __init__(
         self,
+        env,
         num_tentacles: int = 41,
         t0: float = 7.0,           # Time horizon constant (seconds)
         l0: float = 5.0,           # Length offset constant (meters)
         min_tentacle_length: float = 2.0,  # Minimum length at low speeds
         num_points_per_tentacle: int = 50,
-        
-        wheelbase: float = 2.5,
-        vehicle_width: float = 1.8,  # Width of the vehicle in meters
-        max_lateral_acceleration: float = 4.0,
-        max_deceleration: float = 1.5,
         
         # Classification zone parameters
         base_dc: float = 1.4,      # Base classification zone width
@@ -48,23 +43,23 @@ class ClothoidTentaclesController:
         
         # a0, a1 and a2
         weights: typing.Tuple[float, float, float] = (0.1, 0.2, 0.5),
-        
-        # Trajectory criterion parameters
-        trajectory_distance_scale: float = 0.3,  # ca in paper (m/rad)
-        
+
         target_velocity: float = 6.0,
-        kp_velocity: float = 2.0,
+        **kwargs,
     ):
+        self.env = env
         self.num_tentacles = num_tentacles
         self.t0 = t0
         self.l0 = l0
         self.min_tentacle_length = min_tentacle_length
         self.num_points = num_points_per_tentacle
         
-        self.wheelbase = wheelbase
-        self.vehicle_width = vehicle_width
-        self.max_lateral_acceleration = max_lateral_acceleration
-        self.max_deceleration = max_deceleration
+        self.wheelbase = env.unwrapped.WHEELBASE
+        self.vehicle_width = env.unwrapped.CAR_WIDTH
+        self.max_deceleration = env.unwrapped.MAX_BRAKE_DECELERATION
+        
+        # It is used to calculate the maximum allowable curvature at any given speed, ensuring the vehicle can properly follow a tentacle path.
+        self.max_lateral_acceleration = env.unwrapped.MAX_LATERAL_ACCELERATION
         
         self.base_dc = base_dc
         self.dc_low_speed_factor = dc_low_speed_factor
@@ -72,12 +67,7 @@ class ClothoidTentaclesController:
         
         self.weight_clearance, self.weight_curvature, self.weight_trajectory = weights
         
-        # Trajectory parameters
-        self.trajectory_distance_scale = trajectory_distance_scale
-        
-        # Velocity control
         self.target_velocity = target_velocity
-        self.kp_velocity = kp_velocity
         
         # State for visualization and debugging
         self.tentacles: typing.List[Tentacle] = []
@@ -87,6 +77,11 @@ class ClothoidTentaclesController:
         
         # Store current steering for tentacle generation
         self._current_steering: float = 0.0
+        
+        self.road_network=env.unwrapped.road_network
+        
+    def train(self, **kwargs):
+        return self
     
     def _compute_tentacle_length(self, velocity: float) -> float:
         """
@@ -160,8 +155,8 @@ class ClothoidTentaclesController:
                 theta = phi0 + rho0 * t + 0.5 * drho_dl * t * t
                 return np.sin(theta)
             
-            x_integral, _ = integrate.quad(integrand_x, 0, s)
-            y_integral, _ = integrate.quad(integrand_y, 0, s)
+            x_integral, _ = scipy.integrate.quad(integrand_x, 0, s)
+            y_integral, _ = scipy.integrate.quad(integrand_y, 0, s)
             
             points[i] = [x0 + x_integral, y0 + y_integral]
         
@@ -251,7 +246,6 @@ class ClothoidTentaclesController:
         tentacles: typing.List[Tentacle],
         obstacles: typing.List,
         velocity: float,
-        road_network=None,
     ) -> typing.List[Tentacle]:
         """
         A tentacle is non-navigable if:
@@ -279,9 +273,9 @@ class ClothoidTentaclesController:
                     break
                 
                 # Check road boundaries - account for vehicle width
-                if road_network is not None and not exits_road:
+                if self.road_network is not None and not exits_road:
                     # Check centerline
-                    if not road_network.contains_point(p1):
+                    if not self.road_network.contains_point(p1):
                         exits_road = True
                         is_navigable = False
                     else:
@@ -299,8 +293,8 @@ class ClothoidTentaclesController:
                                 left_point = p1 + perpendicular * half_width
                                 right_point = p1 - perpendicular * half_width
                                 
-                                if not road_network.contains_point(left_point) or \
-                                   not road_network.contains_point(right_point):
+                                if not self.road_network.contains_point(left_point) or \
+                                   not self.road_network.contains_point(right_point):
                                     exits_road = True
                                     is_navigable = False
                 
@@ -370,23 +364,69 @@ class ClothoidTentaclesController:
         #     return 0.0
         return abs(tentacle.curvature_rate) / (2.0 * max_curvature / max(lc, 0.1))
     
+    def _extract_obstacles_from_observation(self, observation: dict) -> typing.List:
+        """
+        Extract obstacles from WithObstaclesInfo wrapper observation and convert
+        them back to world coordinates.
+        
+        Args:
+            observation: Dict containing obstacles/instances from WithObstaclesInfo
+            
+        Returns:
+            List of obstacle-like objects with .center and .radius attributes
+        """
+        obstacle_instances = observation["obstacles/instances"]
+        num_detected = int(observation["obstacles/num_obstacles_detected"][0])
+        
+        ego_pos = observation["base/position"]
+        ego_heading = observation["base/heading"][0]
+        
+        # Rotation matrix to transform from ego frame back to world frame
+        cos_h, sin_h = np.cos(ego_heading), np.sin(ego_heading)
+        rotation_matrix = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
+        
+        obstacles = []
+        for i in range(num_detected):
+            obs_data = obstacle_instances[i]
+            exists = obs_data[0]
+            
+            if exists < 0.5:  # Not a real obstacle (padded entry)
+                continue
+            
+            rel_x, rel_y = obs_data[1], obs_data[2]
+            size = obs_data[4]
+            
+            # Transform from ego frame to world frame
+            rel_pos_ego = np.array([rel_x, rel_y])
+            rel_pos_world = rotation_matrix @ rel_pos_ego
+            obs_center_world = ego_pos + rel_pos_world
+            
+            # Create a simple obstacle-like object with required attributes
+            obstacle = type('Obstacle', (), {
+                'center': obs_center_world.tolist(),
+                'radius': size,
+            })()
+            
+            obstacles.append(obstacle)
+        
+        return obstacles
+
     def compute_trajectory_score(
         self,
         tentacle: Tentacle,
-        reference_path: np.ndarray,
+        observation: dict,
         velocity: float,
     ) -> float:
         """
-        Equation (8) and (9) from paper.
+        Calculates distance to path (b) and heading difference (alpha) at the
+        collision distance Lc along the tentacle.
         
-        How well a given tentacle points toward and stays close to the global reference path.
-        We pick a point on the tentacle at the collision distance Lc, and we compare it to the reference trajectory using:
-        - b: distance to the trajectory (lateral distance to path).
-        - alpha: heading difference to the trajectory.
+        Returns:
+            Trajectory distance metric (lower is better)
         """
         lc = self._compute_collision_distance(abs(velocity))
         
-        # Find tentacle point at collision distance Lc
+        # Find tentacle point at collision distance Lc (world frame)
         cumulative_dist = 0.0
         eval_point_idx = 0
         for i in range(len(tentacle.points) - 1):
@@ -398,58 +438,85 @@ class ClothoidTentaclesController:
                 eval_point_idx = i + 1
                 break
         eval_point_idx = min(eval_point_idx, len(tentacle.points) - 1)
-        eval_point = tentacle.points[eval_point_idx]
+        eval_point_world = tentacle.points[eval_point_idx]
         
-        # Find closest point on reference path
-        if len(reference_path) < 2:
+        # Get vehicle state for coordinate transformation
+        position = observation["base/position"]
+        heading = observation["base/heading"][0]
+        
+        # Transform eval point from world to ego frame to match waypoints
+        cos_h, sin_h = np.cos(-heading), np.sin(-heading)
+        rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
+        eval_point_ego = rotation @ (eval_point_world - position)
+        
+        waypoints = observation["path/waypoints"]
+        
+        if len(waypoints) < 1:
             return 0.0
-        distances = np.linalg.norm(reference_path - eval_point, axis=1)
-        closest_idx = np.argmin(distances)
         
+        waypoint_positions = waypoints[:, :2]
+        
+        distances = np.linalg.norm(waypoint_positions - eval_point_ego, axis=1)
+        closest_idx = np.argmin(distances)
         b = distances[closest_idx]
         
-        # Calculate heading difference
-        ### Get tentacle heading at evaluation point
         if eval_point_idx > 0:
-            tentacle_direction = (
+            tentacle_direction_world = (
                 tentacle.points[eval_point_idx] - 
                 tentacle.points[eval_point_idx - 1]
             )
         else:
-            tentacle_direction = (
+            tentacle_direction_world = (
                 tentacle.points[1] - tentacle.points[0]
             )
-        tentacle_heading = np.arctan2(
-            tentacle_direction[1], tentacle_direction[0]
+        
+        tentacle_heading_world = np.arctan2(
+            tentacle_direction_world[1], tentacle_direction_world[0]
         )
-        ### Get path heading at closest point
-        if closest_idx < len(reference_path) - 1:
-            path_direction = (
-                reference_path[closest_idx + 1] - 
-                reference_path[closest_idx]
-            )
+        # Convert to ego frame by subtracting vehicle heading
+        tentacle_heading_ego = np.arctan2(
+            np.sin(tentacle_heading_world - heading),
+            np.cos(tentacle_heading_world - heading)
+        )
+        
+        # Compute path heading in ego frame from waypoints
+        if closest_idx < len(waypoint_positions) - 1:
+            # Use vector from closest to next waypoint
+            path_direction = waypoint_positions[closest_idx + 1] - waypoint_positions[closest_idx]
+        elif closest_idx > 0:
+            # Use vector from previous to closest waypoint
+            path_direction = waypoint_positions[closest_idx] - waypoint_positions[closest_idx - 1]
         else:
-            path_direction = (
-                reference_path[closest_idx] - 
-                reference_path[closest_idx - 1]
-            )
-        path_heading = np.arctan2(path_direction[1], path_direction[0])
-        alpha = tentacle_heading - path_heading
+            # Single waypoint, assume path continues straight ahead (0 rad in ego frame)
+            path_direction = np.array([1.0, 0.0])
+        
+        path_heading_ego = np.arctan2(path_direction[1], path_direction[0])
+        
+        # Heading difference
+        alpha = tentacle_heading_ego - path_heading_ego
         alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
         
-        v_dist = b + self.trajectory_distance_scale * abs(alpha)
+        trajectory_distance_scale = 0.3
+        v_dist = b + trajectory_distance_scale * abs(alpha)
         
         return v_dist
     
     def select_best_tentacle(
         self,
         navigable_tentacles: typing.List[Tentacle],
-        reference_path: np.ndarray,
+        observation: dict,  # Changed from reference_path
         velocity: float,
     ) -> typing.Optional[Tentacle]:
         """
-        Before equation (7) from paper.
-        The tentacle with lowest V_combined is selected.
+        Selects the best tentacle using observation from WithPathInfo wrapper.
+        
+        Args:
+            navigable_tentacles: List of navigable tentacle candidates
+            observation: Dict containing path/waypoints and path/info from WithPathInfo
+            velocity: Current vehicle velocity
+            
+        Returns:
+            Tentacle with lowest combined score, or None if empty
         """
         if not navigable_tentacles:
             return None
@@ -460,7 +527,7 @@ class ClothoidTentaclesController:
                 tentacle, velocity
             )
             tentacle.trajectory_score = self.compute_trajectory_score(
-                tentacle, reference_path, velocity
+                tentacle, observation, velocity  # Pass observation
             )
         
         # Normalize trajectory scores to [0, 1]
@@ -553,30 +620,16 @@ class ClothoidTentaclesController:
         has_navigable_path: bool,
         emergency_braking: bool = False,
     ) -> float:
-        """
-        Compute acceleration command.
-        
-        Args:
-            current_velocity: Current vehicle velocity
-            has_navigable_path: Whether a navigable tentacle exists
-            emergency_braking: Whether to perform emergency braking
-        """
         if emergency_braking or not has_navigable_path:
-            # Emergency braking with maximum comfortable deceleration
             return -self.max_deceleration
         
-        # Normal velocity control
         velocity_error = self.target_velocity - current_velocity
-        return self.kp_velocity * velocity_error
+        return velocity_error
     
+    # TODO: should only rely on observations, get_action should only receive the observation
     def get_action(
         self,
         observation: dict,
-        path: np.ndarray,
-        obstacles: typing.List,
-        road_network=None,
-        max_steering: float = np.pi / 4,
-        max_acceleration: float = 3.0,
         **kwargs
     ) -> np.ndarray:
         """
@@ -600,6 +653,8 @@ class ClothoidTentaclesController:
         
         steering_angle = self._current_steering
         
+        obstacles = self._extract_obstacles_from_observation(observation)
+        
         tentacles = self.generate_tentacles(
             position=position,
             heading=heading,
@@ -611,13 +666,12 @@ class ClothoidTentaclesController:
             tentacles=tentacles,
             obstacles=obstacles,
             velocity=velocity,
-            road_network=road_network,
         )
         
         if navigable:
             tentacle_to_navigate = self.select_best_tentacle(
                 navigable_tentacles=navigable,
-                reference_path=path,
+                observation=observation,
                 velocity=velocity,
             )
             emergency_braking = False
@@ -641,11 +695,11 @@ class ClothoidTentaclesController:
             emergency_braking=emergency_braking,
         )
         
-        steering = np.clip(steering, -max_steering, max_steering)
-        acceleration = np.clip(acceleration, -max_acceleration, max_acceleration)
+        steering = np.clip(steering, self.env.unwrapped.MIN_STEERING, self.env.unwrapped.MAX_STEERING)
+        acceleration = np.clip(acceleration, self.env.unwrapped.MIN_ACCELERATION, self.env.unwrapped.MAX_ACCELERATION)
         
         # Convert acceleration to [0, 1] range
-        accel_normalized = acceleration / max_acceleration
+        accel_normalized = acceleration / self.env.unwrapped.MAX_ACCELERATION
         accel_action = (accel_normalized + 1.0) / 2.0  # Convert [-1, 1] to [0, 1]
         
         return np.array([steering, accel_action, 0.0, 0.0], dtype=np.float32), None

@@ -3,7 +3,7 @@ import pygame
 
 import numpy as np
 
-import environments.bicycle.components.constants as constants
+import environment.components.constants as constants
 
 class Renderer:
     def __init__(

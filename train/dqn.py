@@ -1,24 +1,11 @@
-import sys
-import os
-import time
-
-import numpy as np
-import gymnasium as gym
-
-import matplotlib.pyplot as plt
-
-from stable_baselines3 import PPO, DQN
+from stable_baselines3 import DQN
 from stable_baselines3.common.monitor import Monitor
 
-import environments.bicycle as bicycle
-
-from train.evaluate import evaluate
-from train.environment import make_environment
+from evaluate import evaluate
+from environment import make_environment
 
 def main():
     total_timesteps = 1_000_000
-   
-    # NOTE: Monitor is a stable baseline thing to monitor training nicely in the terminal
     env = Monitor(make_environment(discrete=True))
     
     print("[observation_space]:", env.observation_space)

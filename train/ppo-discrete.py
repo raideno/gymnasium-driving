@@ -1,27 +1,16 @@
-import sys
-import os
-import time
-
-import numpy as np
-import gymnasium as gym
-
-import matplotlib.pyplot as plt
-
-from stable_baselines3 import PPO, DQN
+from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 
-import environments.bicycle as bicycle
-
-from train.environment import make_environment
-from train.evaluate import evaluate
+from evaluate import evaluate
+from environment import make_environment
 
 def main():
     total_timesteps = 1_000_000
     env = Monitor(make_environment(discrete=True))
     
-    print(f"  observation_space : {env.observation_space}")
-    print(f"  action_space      : {env.action_space}")
-
+    print("[observation_space]:", env.observation_space)
+    print("[action_space]:", env.action_space)
+    
     model = PPO(
         "MultiInputPolicy",
         env,
@@ -34,12 +23,11 @@ def main():
         verbose=1,
     )
 
-    print(f"\n  Training for {total_timesteps:,} timesteps …\n")
+    print("[total_timesteps]:", total_timesteps)
+    
     model.learn(total_timesteps=total_timesteps, progress_bar=True)
-    print("\n  Training complete ✓")
 
     evaluate(model, env)
-    return model, env
 
 if __name__ == "__main__":
     main()

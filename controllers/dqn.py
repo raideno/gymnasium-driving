@@ -1,8 +1,5 @@
 import stable_baselines3
 
-import environments
-import environments.bicycle as bicycle
-
 class DQNController:
     """
     Requires a Discrete Observation Space.
@@ -10,7 +7,7 @@ class DQNController:
     def __init__(
         self,
         env,
-        model_kwargs={}
+        **kwargs
     ):
         self.env = env
         
@@ -21,7 +18,7 @@ class DQNController:
         self.model = stable_baselines3.DQN(
             "MultiInputPolicy",
             self.env,
-            **model_kwargs
+            **kwargs.get("model_kwargs", {})
         )
         
     def train(

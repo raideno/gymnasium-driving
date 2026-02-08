@@ -1,15 +1,7 @@
-"""
-Wrappers for the bicycle environment.
-
-Provides observation wrappers, reward wrappers, and action wrappers
-for customizing the environment for different learning tasks.
-"""
-
 from . import actions
 from . import rewards
 from . import observations
 
-# Re-export commonly used wrappers
 from .observations import (
     WithObstaclesInfo,
     WithRoadInfo,

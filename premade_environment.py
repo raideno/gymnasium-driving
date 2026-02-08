@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.monitor import Monitor
 
-import environments.bicycle as bicycle
+import environment.bicycle as bicycle
+
+# TODO: add obstacles and road info to the environment
 
 def make_environment(discrete: bool = True):
     """
@@ -18,11 +20,12 @@ def make_environment(discrete: bool = True):
 
     Wrapper order (inside → outside):
         BicycleCarEnv
-        → PathProgressReward      (reward shaping)
-        → Action wrapper           (discrete or continuous)
-        → WithBaseInfo             (heading + velocity observations)
-        → WithPathInfo             (waypoints + CTE in ego frame)
-        → TimeLimit
+            - PathProgressReward      (reward shaping)
+            - Action wrapper           (discrete or continuous)
+            
+            - WithBaseInfo (position, heading, velocity)
+            - WithPathInfo (waypoints + CTE in ego frame)
+            - TimeLimit
     """
     env = bicycle.BicycleCarEnv(
         road_network=bicycle.RoadNetwork(roads=[

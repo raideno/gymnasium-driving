@@ -1,29 +1,15 @@
-import sys
-import os
-import time
-
-import numpy as np
-import gymnasium as gym
-
-import matplotlib.pyplot as plt
-
-from stable_baselines3 import PPO, DQN
+from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 
-import environments.bicycle as bicycle
+from evaluate import evaluate
+from environment import make_environment
 
-from train.environment import make_environment
-from train.evaluate import evaluate
-
-def main(total_timesteps: int = 500_000):
-    """PPO with ContinuousActionWrapper (2D symmetric [steer, accel])."""
-    print("=" * 60)
-    print(" PPO  +  Continuous 2-D actions  +  PathProgressReward")
-    print("=" * 60)
-
+def main():
+    total_timesteps = 1_000_000
     env = Monitor(make_environment(discrete=False))
-    print(f"  observation_space : {env.observation_space}")
-    print(f"  action_space      : {env.action_space}")
+    
+    print("[observation_space]:", env.observation_space)
+    print("[action_space]:", env.action_space)
 
     model = PPO(
         "MultiInputPolicy",
@@ -37,12 +23,11 @@ def main(total_timesteps: int = 500_000):
         verbose=1,
     )
 
-    print(f"\n  Training for {total_timesteps:,} timesteps …\n")
+    print("[total_timesteps]:", total_timesteps)
+
     model.learn(total_timesteps=total_timesteps, progress_bar=True)
-    print("\n  Training complete ✓")
 
     evaluate(model, env)
-    return model, env
 
 if __name__ == "__main__":
     main()

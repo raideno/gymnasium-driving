@@ -1,6 +1,6 @@
-import stable_baselines3
+import sb3_contrib
 
-class PPOController:
+class TRPOController:
     """
     Requires a Discrete Observation Space.
     """
@@ -11,7 +11,7 @@ class PPOController:
     ):
         self.env = env
         
-        self.model = stable_baselines3.PPO(
+        self.model = sb3_contrib.TRPO(
             "MultiInputPolicy",
             self.env,
             **kwargs.get("model_kwargs", {})

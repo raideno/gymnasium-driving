@@ -347,6 +347,8 @@ class RoadNetwork:
     """A collection of roads forming a network."""
 
     roads: typing.List[Road] = dataclasses.field(default_factory=list)
+    enforce_road: bool = True
+    solid_road_borders: bool = True
 
     def add_road(self, road: Road) -> None:
         self.roads.append(road)
