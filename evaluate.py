@@ -137,7 +137,7 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
         try:
             from PIL import Image as PILImage
             images = [PILImage.fromarray(f) for f in frames[::2]]  # every other frame
-            gif_path = os.path.join(os.path.dirname(__file__), "evaluation.gif")
+            gif_path = os.path.join(os.path.dirname(__file__), "evaluation.local.gif")
             images[0].save(
                 gif_path,
                 save_all=True,
@@ -211,13 +211,13 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
     ax.grid(True, alpha=0.3, axis='y')
 
     plt.tight_layout()
-    plot_path = os.path.join(os.path.dirname(__file__), "evaluation_results.png")
+    plot_path = os.path.join(os.path.dirname(__file__), "evaluation_results.local.png")
     plt.savefig(plot_path, dpi=150)
     print(f"    Plot saved → {plot_path}")
     plt.close()
 
     # ── Save metrics to JSON ──
-    metrics_path = os.path.join(os.path.dirname(__file__), "evaluation_metrics.json")
+    metrics_path = os.path.join(os.path.dirname(__file__), "evaluation_metrics.local.json")
     with open(metrics_path, 'w') as f:
         json.dump(agg_metrics, f, indent=2)
     print(f"    Metrics saved → {metrics_path}")
