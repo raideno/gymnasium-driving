@@ -3,9 +3,6 @@ import numpy as np
 
 class PathProgressReward(gymnasium.Wrapper):
     """
-    Replaces the base environment's reward (always 0.0) with a shaped reward
-    that incentivizes:
-
     1. Forward velocity projected onto the path direction (primary signal)
     2. Staying close to the road center (CTE penalty)
     3. Heading alignment with the path (heading penalty)
@@ -76,7 +73,6 @@ class PathProgressReward(gymnasium.Wrapper):
             # ── 3. Heading alignment penalty ──
             reward -= self.heading_weight * (heading_error / np.pi) ** 2
 
-        # ── 4. Terminal rewards ──
         goal_pos = np.array(self.env.unwrapped.goal_pos, dtype=np.float32)
         goal_dist = np.linalg.norm(ego_position - goal_pos)
 
