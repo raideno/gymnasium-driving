@@ -10,6 +10,7 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
     Adds obstacle information to observations.
     
     For each obstacle within detection range, provides:
+    # TODO: make a toggle to whether to provide in ego frame or global frame
     - Relative position (x, y) in ego-vehicle frame
     - Distance to obstacle
     - Obstacle type and size
@@ -34,18 +35,18 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         self.ego_frame = True
         
         # [exists, rel_x, rel_y, distance, radius/size]
-        self.obs_dim = 5
+        self.obstacle_instance_dimension = 5
         
         new_spaces = dict(self.observation_space.spaces)
         new_spaces["obstacles/instances"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(max_obstacles, self.obs_dim),
+            shape=(self.max_obstacles, self.obstacle_instance_dimension),
             dtype=np.float32,
         )
         new_spaces["obstacles/num_obstacles_detected"] = gymnasium.spaces.Box(
             low=0,
-            high=max_obstacles,
+            high=self.max_obstacles,
             shape=(1,),
             dtype=np.float32,
         )
@@ -54,7 +55,7 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         self._prev_obstacle_positions: typing.Dict[int, np.ndarray] = {}
     
     def observation(self, observation: dict) -> dict:
-        ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
+        ego_position = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
         ego_heading = self.env.unwrapped.state["yaw"]
         
         # NOTE: rotation matrix to transform to ego frame
@@ -65,7 +66,7 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         
         for i, obstacle in enumerate(self.env.unwrapped.obstacles):
             obs_center = np.array(obstacle.center, dtype=np.float32)
-            rel_pos_world = obs_center - ego_pos
+            rel_pos_world = obs_center - ego_position
             distance = np.linalg.norm(rel_pos_world)
             
             if distance > self.detection_range:
@@ -98,7 +99,7 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         # NOTE: pad with zeros if fewer than max_obstacles
         num_detected = len(obstacle_data)
         while len(obstacle_data) < self.max_obstacles:
-            obstacle_data.append([0.0] * self.obs_dim)
+            obstacle_data.append([0.0] * self.obstacle_instance_dimension)
         
         observation["obstacles/instances"] = np.array(obstacle_data, dtype=np.float32)
         observation["obstacles/num_obstacles_detected"] = np.array([num_detected], dtype=np.float32)

@@ -1,28 +1,22 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "experiments"
+name = "gymnasium_driving"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "raideno56",email = "nadirkichou@hotmail.fr"}
+    {name = "Nadir KICHOU", email = "nadirkichou@hotmail.fr"}
 ]
-
-[tool.poetry]
-packages = [
-    # { include = "src" },
-    { include = "gymnasium_driving" }
+requires-python = ">=3.11"
+dependencies = [
+    "gymnasium>=1.2.3",
+    "ipython>=9.10.0",
+    "numpy>=2.4.1",
+    "pygame>=2.6.1",
+    "scipy>=1.17.0",
+    "matplotlib>=3.10.8",
+    "stable-baselines3[extra]>=2.7.1",
+    "hydra-core>=1.3.2",
 ]
-
-[tool.poetry.dependencies]
-python = ">=3.11"
-gymnasium = "^1.2.3"
-numpy = "^2.4.1"
-pygame = "^2.6.1"
-scipy = "^1.17.0"
-matplotlib = "^3.10.8"
-stable-baselines3 = {extras = ["extra"], version = "^2.7.1"}
-hydra-core = "^1.3.2"
-kbm = { git = "https://github.com/winstxnhdw/KinematicBicycleModel" }
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"

@@ -3,3 +3,7 @@
 ```bash
 pip install git+https://github.com/raideno/gymnasium-driving-environment.git
 ```
+
+```bash
+pip install -e .
+```

@@ -5,6 +5,8 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
+from stable_baselines3.common.results_plotter import load_results, ts2xy
+
 from src.metrics.cross_track_error import compute_cross_track_error
 from src.metrics.steering_smoothness import compute_steering_smoothness
 
@@ -47,8 +49,67 @@ def compute_episode_metrics(env, target_velocity: float = 5.0) -> dict:
     return {**cte_metrics, **steering_metrics, **velocity_metrics, **episode_metrics}
 
 
-def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
-    """Run evaluation episodes and produce diagnostic plots / gif."""
+def plot_training_results(log_dir: str, output_path: str):
+    """Generate separate plots for training results using ts2xy with different x-axis options."""
+    
+    x_axis_options = ["timesteps", "episodes", "walltime_hrs"]
+    x_axis_labels = {
+        "timesteps": "Timesteps",
+        "episodes": "Episodes", 
+        "walltime_hrs": "Wall Time (hours)"
+    }
+    
+    try:
+        results = load_results(log_dir)
+    except Exception as e:
+        print(f"    Could not load training results: {e}")
+        return
+    
+    for x_axis in x_axis_options:
+        try:
+            x, y = ts2xy(results, x_axis)
+            
+            if len(x) == 0:
+                print(f"    No data for {x_axis}, skipping...")
+                continue
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(x, y, alpha=0.7, linewidth=1)
+            
+            # Add moving average
+            if len(y) > 10:
+                window = min(50, len(y) // 5)
+                moving_avg = np.convolve(y, np.ones(window)/window, mode='valid')
+                ax.plot(x[window-1:], moving_avg, color='red', linewidth=2, label=f'Moving Avg ({window} ep)')
+                ax.legend()
+            
+            ax.set_xlabel(x_axis_labels[x_axis])
+            ax.set_ylabel("Episode Reward")
+            ax.set_title(f"Training Progress ({x_axis_labels[x_axis]})")
+            ax.grid(True, alpha=0.3)
+            
+            plot_path = os.path.join(output_path, f"training_progress_{x_axis}.png")
+            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.close()
+            print(f"    Plot saved → {plot_path}")
+            
+        except Exception as e:
+            print(f"    Could not generate plot for {x_axis}: {e}")
+
+
+def evaluate(model, env, output_path: str, num_episodes: int = 10, save_gif: bool = True):
+    """Run evaluation episodes and produce diagnostic plots / gif.
+    
+    Args:
+        model: The trained model to evaluate.
+        env: The environment to evaluate in.
+        output_path: Directory path where all outputs will be saved.
+        num_episodes: Number of evaluation episodes to run.
+        save_gif: Whether to save an animated GIF of an evaluation episode.
+    """
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_path, exist_ok=True)
 
     print(f"\n{'─' * 60}")
     print(f"  Evaluation  ({num_episodes} episodes, deterministic)")
@@ -136,7 +197,7 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
         try:
             from PIL import Image as PILImage
             images = [PILImage.fromarray(f) for f in frames[::2]]  # every other frame
-            gif_path = os.path.join(os.path.dirname(__file__), "evaluation.local.gif")
+            gif_path = os.path.join(output_path, "evaluation.gif")
             images[0].save(
                 gif_path,
                 save_all=True,
@@ -148,11 +209,10 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
         except Exception as exc:
             print(f"    (could not save gif: {exc})")
 
-    # ── Plots ──
-    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-
+    # ── Plots (separate files) ──
+    
     # Plot 1: Reward progression across episodes
-    ax = axes[0, 0]
+    fig, ax = plt.subplots(figsize=(10, 6))
     episodes = np.arange(1, num_episodes + 1)
     ax.bar(episodes, episode_reward_history, color='steelblue', alpha=0.7)
     ax.axhline(np.mean(episode_reward_history), ls='--', color='red', label=f'Mean: {np.mean(episode_reward_history):.1f}')
@@ -161,9 +221,13 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
     ax.set_title("Reward per Episode")
     ax.legend()
     ax.grid(True, alpha=0.3)
+    plot_path = os.path.join(output_path, "evaluation_reward_per_episode.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"    Plot saved → {plot_path}")
 
     # Plot 2: Trajectory with CTE visualization
-    ax = axes[0, 1]
+    fig, ax = plt.subplots(figsize=(10, 10))
     path = env.unwrapped.path
     if path is not None:
         ax.plot(path[:, 0], path[:, 1], "b--", alpha=0.25, linewidth=2, label="Reference path")
@@ -177,9 +241,13 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
     ax.set_title("Learned Trajectory")
     ax.legend(fontsize=8)
     ax.set_aspect("equal")
+    plot_path = os.path.join(output_path, "evaluation_learned_trajectory.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"    Plot saved → {plot_path}")
 
     # Plot 3: Velocity profile
-    ax = axes[1, 0]
+    fig, ax = plt.subplots(figsize=(10, 6))
     time_axis = np.arange(len(velocities)) * env.unwrapped.DELTA_TIME
     ax.plot(time_axis, velocities, label='Velocity')
     ax.axhline(5.0, ls="--", color="gray", alpha=0.5, label="Target 5 m/s")
@@ -189,9 +257,13 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
     ax.set_title("Velocity Profile")
     ax.legend()
     ax.grid(True, alpha=0.3)
+    plot_path = os.path.join(output_path, "evaluation_velocity_profile.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"    Plot saved → {plot_path}")
 
     # Plot 4: Key metrics comparison
-    ax = axes[1, 1]
+    fig, ax = plt.subplots(figsize=(10, 6))
     metric_names = ['CTE RMS\n(m)', 'Steering Jerk\n(rad/s³)', 'Velocity Error\n(m/s)']
     metric_values = [
         agg_metrics.get('cte_rms_mean', 0),
@@ -208,15 +280,13 @@ def evaluate(model, env, num_episodes: int = 10, save_gif: bool = True):
     ax.set_ylabel("Value")
     ax.set_title("Key Performance Metrics (lower is better)")
     ax.grid(True, alpha=0.3, axis='y')
-
-    plt.tight_layout()
-    plot_path = os.path.join(os.path.dirname(__file__), "evaluation_results.local.png")
-    plt.savefig(plot_path, dpi=150)
-    print(f"    Plot saved → {plot_path}")
+    plot_path = os.path.join(output_path, "evaluation_performance_metrics.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
     plt.close()
+    print(f"    Plot saved → {plot_path}")
 
     # ── Save metrics to JSON ──
-    metrics_path = os.path.join(os.path.dirname(__file__), "evaluation_metrics.local.json")
+    metrics_path = os.path.join(output_path, "evaluation_metrics.json")
     with open(metrics_path, 'w') as f:
         json.dump(agg_metrics, f, indent=2)
     print(f"    Metrics saved → {metrics_path}")

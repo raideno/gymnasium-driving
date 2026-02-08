@@ -6,7 +6,6 @@ from .observations import (
     WithObstaclesInfo,
     WithRoadInfo,
     WithPathInfo,
-    WithDynamicsInfo,
 )
 
 from .rewards import (
@@ -33,7 +32,6 @@ __all__ = [
     "WithObstaclesInfo",
     "WithRoadInfo",
     "WithPathInfo",
-    "WithDynamicsInfo",
     
     # Reward wrappers
     "CombinedReward",
