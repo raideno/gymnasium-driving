@@ -1,7 +1,5 @@
-# Gymnasium Bicycle Environment
+# Gymnasium Driving Environment
 
-No rewarding nor termination system is implemented, you can extend the environment to add your own.
-
---- --- ---
-
-Be careful to not over engineer it.
+```bash
+pip install git+https://github.com/raideno/gymnasium-driving-environment.git
+```
