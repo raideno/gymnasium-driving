@@ -1,4 +1,4 @@
-from stable_baselines3 import PPO
+from sb3_contrib import TRPO
 from stable_baselines3.common.monitor import Monitor
 
 from evaluate import evaluate
@@ -11,7 +11,7 @@ def main():
     print("[observation_space]:", env.observation_space)
     print("[action_space]:", env.action_space)
 
-    model = PPO(
+    model = TRPO(
         "MultiInputPolicy",
         env,
         learning_rate=3e-4,

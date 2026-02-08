@@ -2,7 +2,7 @@ from stable_baselines3 import DQN
 from stable_baselines3.common.monitor import Monitor
 
 from evaluate import evaluate
-from environment import make_environment
+from premade_environment import make_environment
 
 def main():
     total_timesteps = 1_000_000

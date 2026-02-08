@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.monitor import Monitor
 
+import environment
+import environment.wrappers
 import environment.bicycle as bicycle
 
 # TODO: add obstacles and road info to the environment
@@ -43,11 +45,9 @@ def make_environment(discrete: bool = True):
         obstacles=[
             bicycle.Circle(center=(90, 50), radius=1.0),
         ],
-        solid_road_borders=True,
-        dt=0.1,
     )
 
-    env = bicycle.wrappers.rewards.PathProgressReward(
+    env = environment.wrappers.rewards.PathProgressReward(
         env,
         target_velocity=5.0,
         velocity_weight=1.0,
@@ -56,12 +56,12 @@ def make_environment(discrete: bool = True):
     )
 
     if discrete:
-        env = bicycle.wrappers.actions.DiscreteActionWrapper(env)
+        env = environment.wrappers.actions.DiscreteActionWrapper(env)
     else:
-        env = bicycle.wrappers.actions.ContinuousActionWrapper(env)
+        env = environment.wrappers.actions.ContinuousActionWrapper(env)
 
-    env = bicycle.wrappers.observations.WithBaseInfo(env)
-    env = bicycle.wrappers.observations.WithPathInfo(env)
+    env = environment.wrappers.observations.WithBaseInfo(env)
+    env = environment.wrappers.observations.WithPathInfo(env)
 
     # 1000 steps × 0.1 s = 100 s ≈ 2 laps at 5 m/s
     env = gym.wrappers.TimeLimit(env, max_episode_steps=1000)
