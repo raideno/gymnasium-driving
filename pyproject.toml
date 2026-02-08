@@ -8,13 +8,13 @@ authors = [
 
 [tool.poetry]
 packages = [
-    { include = "src" }
+    { include = "src" },
+    { include = "gymnasium_driving" }
 ]
 package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.11"
-gymnasium-driving = { path = "../library", develop = true }
 gymnasium = "^1.2.3"
 numpy = "^2.4.1"
 pygame = "^2.6.1"
@@ -22,6 +22,7 @@ scipy = "^1.17.0"
 matplotlib = "^3.10.8"
 stable-baselines3 = {extras = ["extra"], version = "^2.7.1"}
 hydra-core = "^1.3.2"
+kbm = { git = "https://github.com/winstxnhdw/KinematicBicycleModel" }
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
