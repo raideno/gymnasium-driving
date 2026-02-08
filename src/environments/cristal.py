@@ -1,9 +1,17 @@
+import typing
+
 import gymnasium as gym
 
 import gymnasium_driving
 import gymnasium_driving.wrappers
+
+from src.environments.random import RandomPathObstacles
     
-def make_environment(discrete: bool):
+def make_environment(
+    discrete: bool,
+    random_obstacles: bool = False,
+    render_mode: typing.Literal["rgb_array", "human"] | None = None
+):
     """
     Create the bicycle environment with the correct wrapper stack.
 
@@ -27,7 +35,8 @@ def make_environment(discrete: bool):
                 width=8.0,
             )
         ]),
-        render_mode="rgb_array",
+        # TODO: disable rendering
+        render_mode=render_mode,
         spawn=((50.0, 30.0), 0.0),
         goal=((10.0, 50.0), 2.0),
         obstacles=[
@@ -50,6 +59,10 @@ def make_environment(discrete: bool):
 
     env = gymnasium_driving.wrappers.observations.WithBaseInfo(env)
     env = gymnasium_driving.wrappers.observations.WithPathInfo(env)
+    env = gymnasium_driving.wrappers.observations.WithObstaclesInfo(env)
+
+    if random_obstacles:
+        env = RandomPathObstacles(env, num_obstacles=1)
 
     # 1000 steps × 0.1 s = 100 s ≈ 2 laps at 5 m/s
     env = gym.wrappers.TimeLimit(env, max_episode_steps=1000)

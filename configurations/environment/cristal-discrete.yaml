@@ -1,2 +1,3 @@
 _target_: src.environments.cristal.make_environment
 discrete: true
+random_obstacles: false

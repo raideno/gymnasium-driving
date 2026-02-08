@@ -65,8 +65,7 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         obstacle_data = []
         
         for i, obstacle in enumerate(self.env.unwrapped.obstacles):
-            obs_center = np.array(obstacle.center, dtype=np.float32)
-            rel_pos_world = obs_center - ego_position
+            rel_pos_world = np.array(obstacle.center, dtype=np.float32) - ego_position
             distance = np.linalg.norm(rel_pos_world)
             
             if distance > self.detection_range:

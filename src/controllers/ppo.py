@@ -46,3 +46,9 @@ class PPOController:
             deterministic=True
         )
         
+    def draw_debug(
+        self,
+        observation,
+        **kwargs
+    ):
+        pass

@@ -54,12 +54,12 @@ class ClothoidTentaclesController:
         self.min_tentacle_length = min_tentacle_length
         self.num_points = num_points_per_tentacle
         
-        self.wheelbase = env.unwrapped.WHEELBASE
-        self.vehicle_width = env.unwrapped.CAR_WIDTH
-        self.max_deceleration = env.unwrapped.MAX_BRAKE_DECELERATION
+        self.wheelbase = self.env.unwrapped.WHEELBASE
+        self.vehicle_width = self.env.unwrapped.CAR_WIDTH
+        self.max_deceleration = self.env.unwrapped.MAX_BRAKE_DECELERATION
         
         # It is used to calculate the maximum allowable curvature at any given speed, ensuring the vehicle can properly follow a tentacle path.
-        self.max_lateral_acceleration = env.unwrapped.MAX_LATERAL_ACCELERATION
+        self.max_lateral_acceleration = self.env.unwrapped.MAX_LATERAL_ACCELERATION
         
         self.base_dc = base_dc
         self.dc_low_speed_factor = dc_low_speed_factor
@@ -78,7 +78,7 @@ class ClothoidTentaclesController:
         # Store current steering for tentacle generation
         self._current_steering: float = 0.0
         
-        self.road_network=env.unwrapped.road_network
+        self.road_network = self.env.unwrapped.road_network
         
     def learn(self, **kwargs):
         return self
@@ -709,7 +709,6 @@ class ClothoidTentaclesController:
     
     def draw_debug(
         self,
-        env,
         observation: dict,
         path: np.ndarray,
     ) -> None:
@@ -749,7 +748,7 @@ class ClothoidTentaclesController:
             
             # Draw tentacle path
             if len(tentacle.points) >= 2:
-                env.unwrapped.overlay_manager.add_path(
+                self.env.unwrapped.overlay_manager.add_path(
                     points=tentacle.points,
                     color=color,
                     width=width,
@@ -769,7 +768,7 @@ class ClothoidTentaclesController:
             step = max(1, len(tentacle.points) // num_zone_circles)
             for i in range(0, len(tentacle.points), step):
                 point = tentacle.points[i]
-                env.unwrapped.overlay_manager.add_circle(
+                self.env.unwrapped.overlay_manager.add_circle(
                     center=tuple(point),
                     radius=self.classification_radius,
                     color=COLOR_CLASSIFICATION,
@@ -778,7 +777,7 @@ class ClothoidTentaclesController:
             
             # Draw the tentacle path (thicker)
             if len(tentacle.points) >= 2:
-                env.unwrapped.overlay_manager.add_path(
+                self.env.unwrapped.overlay_manager.add_path(
                     points=tentacle.points,
                     color=color,
                     width=3,
@@ -787,7 +786,7 @@ class ClothoidTentaclesController:
             
             # Draw endpoint
             end_point = tentacle.points[-1]
-            env.unwrapped.overlay_manager.add_circle(
+            self.env.unwrapped.overlay_manager.add_circle(
                 center=tuple(end_point),
                 radius=0.5,
                 color=color,
@@ -804,7 +803,7 @@ class ClothoidTentaclesController:
                 cumulative_dist += segment_length
                 
                 if cumulative_dist >= lc:
-                    env.unwrapped.overlay_manager.add_circle(
+                    self.env.unwrapped.overlay_manager.add_circle(
                         center=tuple(p2),
                         radius=0.3,
                         color=(255, 255, 0),  # Yellow
@@ -819,7 +818,7 @@ class ClothoidTentaclesController:
                 f"Traj:{tentacle.trajectory_score:.2f}"
             )
             text_pos = (position[0] + 2, position[1] + 4)
-            env.unwrapped.overlay_manager.add_text(
+            self.env.unwrapped.overlay_manager.add_text(
                 position=text_pos,
                 text=score_text,
                 color=(0, 0, 0),
@@ -835,7 +834,7 @@ class ClothoidTentaclesController:
                 status_color = (0, 100, 0)
             
             status_pos = (position[0] + 2, position[1] + 6)
-            env.unwrapped.overlay_manager.add_text(
+            self.env.unwrapped.overlay_manager.add_text(
                 position=status_pos,
                 text=status_text,
                 color=status_color,
@@ -843,7 +842,7 @@ class ClothoidTentaclesController:
             )
         
         # Draw tentacle count indicator
-        env.unwrapped.overlay_manager.add_text(
+        self.env.unwrapped.overlay_manager.add_text(
             position=(position[0] + 2, position[1] + 2),
             text=f"Tentacles: {len(self.tentacles)}",
             color=(0, 0, 0),

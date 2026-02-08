@@ -8,6 +8,16 @@ from src.helpers import save_configuration
 
 from evaluate import evaluate, plot_training_results
 
+# TODO: treat the warnings and errors that are appearing
+# (.venv) nadir@macbook gymnasium % python train.py controller=dqn environment=cristal-discrete total_timesteps=1000000                                                
+# /Users/nadir/Documents/research-project/code/experimentations/gymnasium/.venv/lib/python3.12/site-packages/hydra/_internal/defaults_list.py:251: UserWarning: In 'tra
+# in': Defaults list is missing `_self_`. See https://hydra.cc/docs/1.2/upgrades/1.0_to_1.1/default_composition_order for more information                             
+#   warnings.warn(msg, UserWarning)                                                                                                                                    
+# [output_directory]: /Users/nadir/Documents/research-project/code/experimentations/gymnasium/outputs/2026-02-08/19-37-17                                              
+# Logging to /Users/nadir/Documents/research-project/code/experimentations/gymnasium/outputs/2026-02-08/19-37-17/logs                                                  
+# Using cpu device                                                                                                                                                     
+# Wrapping the env in a DummyVecEnv.
+
 # NOTE: ts2xy can accept "timesteps" (cumulative environment timesteps when episode ended), "episodes" (episode index), "walltime_hrs" (elapsed real time in hours since training started)
 # all output a y as the episode returns and a different x
 # https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/common/results_plotter.py
@@ -80,7 +90,6 @@ def main(configuration: omegaconf.DictConfig):
     # we'll pass it as an argument the output directory
     # it'll load the configuration, instantiate the environment and controller, and run the evaluation
     # do the plots and the save results in the same output directory
-    
     
 if __name__ == "__main__":
     main()
