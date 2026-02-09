@@ -1,0 +1,5 @@
+_target_: gymnasium_driving.wrappers.rewards.path_progress_reward.PathProgressReward
+target_velocity: 5.0
+velocity_weight: 1.0
+cte_weight: 0.3
+heading_weight: 0.2

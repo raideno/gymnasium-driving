@@ -16,10 +16,12 @@ class SimpleRewardWrapper(gymnasium.RewardWrapper):
     
     def __init__(
         self,
-        env: gymnasium.Env,
+        environment: gymnasium.Env,
         off_road_penalty: float = 0.1,
     ):
-        super().__init__(env)
+        super().__init__(environment)
+        self.env = environment
+        
         self.off_road_penalty = off_road_penalty
     
     def reward(self, reward: float) -> float:

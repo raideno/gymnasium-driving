@@ -37,8 +37,7 @@ def closest_polyline_index(polyline_xy: np.ndarray, point_xy: np.ndarray) -> int
     polyline_xy: (N, 2)
     point_xy: (2,)
     """
-    dists = np.linalg.norm(polyline_xy - point_xy, axis=1)
-    return int(np.argmin(dists))
+    return int(np.argmin(np.linalg.norm(polyline_xy - point_xy, axis=1)))
 
 def polyline_tangent(polyline_xy: np.ndarray, idx: int) -> np.ndarray:
     """

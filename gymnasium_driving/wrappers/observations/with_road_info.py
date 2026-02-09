@@ -19,9 +19,11 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
     
     def __init__(
         self,
-        env: gymnasium.Env,
+        environment: gymnasium.Env,
     ):
-        super().__init__(env)
+        super().__init__(environment)
+        
+        self.env = environment
         
         new_spaces = dict(self.observation_space.spaces)
         
@@ -53,30 +55,13 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         if len(centerline) == 0:
             observation["road/info"] = road_info
             return observation
-        distances = np.linalg.norm(centerline - ego_pos, axis=1)
-        closest_idx = np.argmin(distances)
-        closest_point = centerline[closest_idx]
         
-        if closest_idx < len(centerline) - 1:
-            road_direction = centerline[closest_idx + 1] - centerline[closest_idx]
-        else:
-            road_direction = centerline[closest_idx] - centerline[closest_idx - 1]
-        
-        road_heading = np.arctan2(road_direction[1], road_direction[0])
-        
-        # NOTE: positive if to the left of the centerline
-        cross_track_error = np.cross(road_direction, ego_pos - closest_point) / (np.linalg.norm(road_direction) + 1e-6)
+        closest_idx = closest_polyline_index(centerline, ego_pos)
+        cross_track_error, closest_idx = signed_cte_to_polyline(centerline, ego_pos, idx=closest_idx)
+        heading_error = heading_error_to_polyline(centerline, ego_heading, closest_idx)
         
         dist_left = half_width - cross_track_error
         dist_right = half_width + cross_track_error
-        
-        # NOTE: normalized heading error in range [-pi, pi]
-        heading_error = ego_heading - road_heading
-        heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
-        
-        # idx = closest_polyline_index(centerline, ego_pos)
-        # cross_track_error, idx = signed_cte_to_polyline(centerline, ego_pos, idx=idx)
-        # heading_error = heading_error_to_polyline(centerline, ego_heading, idx)
         
         curvature = curvature_windowed(centerline, closest_idx, window=5)
         

@@ -3,4 +3,6 @@ total_timesteps: 1_000_000
 defaults:
   - controller: ???
   - environment: ???
+  - reward: ???
   - defaults
+  - _self_

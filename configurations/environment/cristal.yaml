@@ -1,0 +1,7 @@
+_target_: src.environments.cristal.make_environment
+discrete: ???
+random_obstacles: false
+number_of_obstacles: 0
+random_spawn: true
+render_mode: null
+dimensions: [80.0, 40.0]

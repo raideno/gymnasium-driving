@@ -34,3 +34,53 @@ def save_configuration(
     if script is not None:
         with open(os.path.join(output_directory, "script"), "w") as file:
             file.write(script)
+
+def load_configuration(
+    output_directory: str,
+    expected_script: str | None = None,
+):
+    with open(os.path.join(output_directory, "configuration.json"), "r") as file:
+        configuration = json.load(file)
+    
+    if expected_script is not None:
+        with open(os.path.join(output_directory, "script"), "r") as file:
+            script = file.read()
+        
+        if script != expected_script:
+            raise ValueError(f"Expected script does not match the one in the output directory. Expected: {expected_script}, Found: {script}")
+    
+    return configuration
+
+def instantiate_configuration(
+    configuration: omegaconf.DictConfig,
+    output_directory: str | None = None,
+    load_best_model: bool = True,
+):
+    """
+    Instantiate environment, reward wrapper, and controller from configuration.
+    
+    Args:
+        configuration: Hydra configuration containing environment, reward, and controller specs
+        output_directory: Path to directory containing saved models (optional)
+        load_best_model: Whether to load the best model if it exists
+    
+    Returns:
+        Tuple of (controller, environment)
+    """
+    environment = hydra.utils.instantiate(configuration.environment)
+    environment = hydra.utils.instantiate(
+        configuration.reward,
+        environment=environment,
+    )
+    
+    controller = hydra.utils.instantiate(
+        configuration.controller,
+        environment=environment,
+    )
+    
+    if load_best_model and output_directory is not None:
+        best_model_path = os.path.join(output_directory, "best_model.zip")
+        if os.path.exists(best_model_path):
+            controller.model = controller.model.load(best_model_path, env=environment)
+    
+    return controller, environment

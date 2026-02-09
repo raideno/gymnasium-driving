@@ -24,11 +24,13 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
     
     def __init__(
         self,
-        env: gymnasium.Env,
+        environment: gymnasium.Env,
         detection_range: float = 50.0,
         max_obstacles: int = 10,
     ):
-        super().__init__(env)
+        super().__init__(environment)
+        
+        self.env = environment
         
         self.detection_range = detection_range
         self.max_obstacles = max_obstacles

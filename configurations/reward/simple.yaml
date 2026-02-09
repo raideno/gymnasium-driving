@@ -1,0 +1,11 @@
+_target_: gymnasium_driving.wrappers.rewards.simple_reward.SimpleRewardWrapper
+target_velocity: 5.0
+velocity_weight: 1.0
+
+cte_weight: 0.3
+heading_weight: 0.2
+
+goal_reward: 100.0
+
+collision_penalty: -10.0
+truncation_penalty: -5.0

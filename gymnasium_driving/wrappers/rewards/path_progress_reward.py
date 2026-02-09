@@ -14,7 +14,7 @@ class PathProgressReward(gymnasium.Wrapper):
 
     def __init__(
         self,
-        env: gymnasium.Env,
+        environment: gymnasium.Env,
         
         target_velocity: float = 5.0,
         velocity_weight: float = 1.0,
@@ -27,7 +27,9 @@ class PathProgressReward(gymnasium.Wrapper):
         collision_penalty: float = -10.0,
         truncation_penalty: float = -5.0,
     ):
-        super().__init__(env)
+        super().__init__(environment)
+        
+        self.env = environment
 
         self.target_velocity = target_velocity
         self.velocity_weight = velocity_weight

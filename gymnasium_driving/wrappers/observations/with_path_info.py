@@ -24,10 +24,12 @@ class WithPathInfo(gymnasium.ObservationWrapper):
     
     def __init__(
         self,
-        env: gymnasium.Env,
+        environment: gymnasium.Env,
         num_waypoints: int = 10,
     ):
-        super().__init__(env)
+        super().__init__(environment)
+        
+        self.env = environment
         
         self.num_waypoints = num_waypoints
         
@@ -68,32 +70,9 @@ class WithPathInfo(gymnasium.ObservationWrapper):
             observation["path/info"] = path_info
             return observation
         
-        # NOTE: closest point on path
-        closest_point_index = np.argmin(np.linalg.norm(path - ego_pos, axis=1))
-        closest_point = path[closest_point_index]
-        
-        # NOTE: signed cross-track error
-        if closest_point_index < len(path) - 1:
-            path_direction = path[closest_point_index + 1] - path[closest_point_index]
-        elif closest_point_index > 0:
-            path_direction = path[closest_point_index] - path[closest_point_index - 1]
-        else:
-            path_direction = np.array([1.0, 0.0])
-        path_heading = np.arctan2(path_direction[1], path_direction[0])
-        
-        # to_ego = ego_pos - closest_point
-        # cross = float(path_direction[0] * to_ego[1] - path_direction[1] * to_ego[0])
-        # NOTE: measure how much ego is to the left or right of the path using cross product
-        cte = float(np.cross(path_direction, ego_pos - closest_point)) / (np.linalg.norm(path_direction) + 1e-6)
-        # cte = cross / (np.linalg.norm(path_direction) + 1e-6)
-        
-        # NOTE: heading error
-        heading_error = ego_heading - path_heading
-        heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
-        
-        # idx = closest_polyline_index(path, ego_pos)
-        # cte, idx = signed_cte_to_polyline(path, ego_pos, idx=idx)
-        # heading_error = heading_error_to_polyline(path, ego_heading, idx)
+        closest_point_index = closest_polyline_index(path, ego_pos)
+        cte, closest_point_index = signed_cte_to_polyline(path, ego_pos, idx=closest_point_index)
+        heading_error = heading_error_to_polyline(path, ego_heading, closest_point_index)
         
         # NOTE: normalized progress along the path
         progress = closest_point_index / max(len(path) - 1, 1)

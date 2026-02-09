@@ -1,10 +1,15 @@
 _target_: src.controllers.dqn.DQNController
 model_kwargs:
-  learning_rate: 0.0001
-  buffer_size: 100_000
+  learning_rate: 0.0003
+  buffer_size: 200_000
   learning_starts: 10_000
-  batch_size: 64
+  batch_size: 128
   gamma: 0.99
-  exploration_fraction: 0.3
+  # slower exploration decay — the agent needs more time to
+  # explore varied scenarios
+  exploration_fraction: 0.5
   exploration_final_eps: 0.05
+  # target network update frequency — less frequent updates
+  # improve stability
+  target_update_interval: 1000
   verbose: 1
