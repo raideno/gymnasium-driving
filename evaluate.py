@@ -54,11 +54,12 @@ def plot_training_results(log_dir: str, output_path: str):
             plot_path = os.path.join(output_path, f"training_progress_{x_axis}.png")
             plt.savefig(plot_path, dpi=150, bbox_inches='tight')
             plt.close()
-            print(f"    Plot saved → {plot_path}")
+            print(f"[plot]: {plot_path}")
             
         except Exception as e:
-            print(f"    Could not generate plot for {x_axis}: {e}")
-
+            print(f"[plot](error): could not generate plot for {x_axis}: {e}")
+            
+    print()
 
 def evaluate(model, env, output_path: str, num_episodes: int = 10):
     """Run evaluation episodes and produce diagnostic plots / gif.
@@ -92,11 +93,11 @@ def evaluate(model, env, output_path: str, num_episodes: int = 10):
         all_steps.append(steps)
         episode_reward_history.append(total_reward)
         
-        print(f"[ep-{ep + 1:>2d}]:  steps={steps:>4d}  reward={total_reward:>8.1f}")
+        print(f"[ep-{(ep + 1):>2}]: steps={steps:>4d}; reward={total_reward:>4.1f}")
 
-    print(f"\n    ── Summary Statistics ──")
-    print(f"    reward:       {np.mean(all_rewards):>8.1f} ± {np.std(all_rewards):.1f}")
-    print(f"    steps:        {np.mean(all_steps):>8.0f} ± {np.std(all_steps):.0f}")
+    print()
+    print(f"[reward]: {np.mean(all_rewards):>8.1f} ± {np.std(all_rewards):.1f}")
+    print(f"[steps]: {np.mean(all_steps):>8.0f} ± {np.std(all_steps):.0f}")
 
     plt.figure(figsize=(10, 6))
     episodes = np.arange(1, num_episodes + 1)

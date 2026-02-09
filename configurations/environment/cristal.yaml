@@ -1,7 +1,10 @@
 _target_: src.environments.cristal.make_environment
 discrete: ???
-random_obstacles: false
-number_of_obstacles: 0
+wrappers: ???
+random_obstacles: true
+number_of_obstacles: 2
 random_spawn: true
 render_mode: null
 dimensions: [80.0, 40.0]
+
+# python train.py --multirun environment=cristal environment.discrete=true environment.wrappers=\[WithBaseInfo,WithPathInfo,WithObstaclesInfo\],\[WithRoadInfo,WithBaseInfo,WithPathInfo,WithObstaclesInfo\] controller=dqn,ppo-discrete,trpo-discrete reward=path-progress,simple

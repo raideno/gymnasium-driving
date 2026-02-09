@@ -14,6 +14,12 @@ def make_environment(
     random_spawn: bool = True,
     render_mode: typing.Literal["rgb_array", "human"] | None = None,
     dimensions: typing.Tuple[int, int] = (80.0, 40.0),
+    wrappers: typing.List[typing.Literal["WithRoadInfo", "WithBaseInfo", "WithPathInfo", "WithObstaclesInfo"]] = [
+        "WithRoadInfo",
+        "WithBaseInfo",
+        "WithPathInfo",
+        "WithObstaclesInfo",
+    ],
 ):
     """
     Create the bicycle environment with the correct wrapper stack.
@@ -57,10 +63,17 @@ def make_environment(
     else:
         env = gymnasium_driving.wrappers.actions.ContinuousActionWrapper(env)
 
-    env = gymnasium_driving.wrappers.observations.WithRoadInfo(env)
-    env = gymnasium_driving.wrappers.observations.WithBaseInfo(env)
-    env = gymnasium_driving.wrappers.observations.WithPathInfo(env)
-    env = gymnasium_driving.wrappers.observations.WithObstaclesInfo(env)
+    for wrapper_name in wrappers:
+        if wrapper_name == "WithRoadInfo":
+            env = gymnasium_driving.wrappers.observations.WithRoadInfo(env)
+        elif wrapper_name == "WithBaseInfo":
+            env = gymnasium_driving.wrappers.observations.WithBaseInfo(env)
+        elif wrapper_name == "WithPathInfo":
+            env = gymnasium_driving.wrappers.observations.WithPathInfo(env)
+        elif wrapper_name == "WithObstaclesInfo":
+            env = gymnasium_driving.wrappers.observations.WithObstaclesInfo(env)
+        else:
+            raise ValueError(f"Unknown wrapper name: {wrapper_name}")
 
     if random_spawn:
         env = RandomSpawn(

@@ -1,2 +1,6 @@
 # hydra:
 #   verbose: true
+
+# https://hydra.cc/docs/plugins/joblib_launcher/
+defaults:
+  - override hydra/launcher: joblib

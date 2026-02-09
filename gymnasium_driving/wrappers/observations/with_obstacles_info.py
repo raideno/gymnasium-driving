@@ -36,6 +36,8 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         self.max_obstacles = max_obstacles
         self.ego_frame = True
         
+        # TODO: add rel_x > 0
+        # TODO: add time to collision ttc
         # [exists, rel_x, rel_y, distance, radius/size]
         self.obstacle_instance_dimension = 5
         

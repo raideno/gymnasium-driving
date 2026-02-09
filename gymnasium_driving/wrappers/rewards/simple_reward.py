@@ -27,22 +27,22 @@ class SimpleRewardWrapper(gymnasium.RewardWrapper):
     def reward(self, reward: float) -> float:
         ego_position = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
         
-        goal_distance = np.linalg.norm(ego_position - self.env.goal_pos)
-        if goal_distance <= self.env.goal_radius:
+        goal_distance = np.linalg.norm(ego_position - self.env.unwrapped.goal_pos)
+        if goal_distance <= self.env.unwrapped.goal_radius:
             return 100.0
         
         # collision
-        if self.env._check_collision():
+        if self.env.unwrapped._check_collision():
             return -100.0
         
         # out of bounds
-        if not self.env._within_world_boundaries():
+        if not self.env.unwrapped._within_world_boundaries():
             return -50.0
         
         # off road
-        if self.env.road_network is not None:
-            if self.env.road_network.is_off_road(ego_position):
-                if self.env.enforce_road:
+        if self.env.unwrapped.road_network is not None:
+            if self.env.unwrapped.road_network.is_off_road(ego_position):
+                if self.env.unwrapped.road_network.enforce_road:
                     return -100.0
                 else:
                     return self.off_road_penalty - 0.01 * goal_distance

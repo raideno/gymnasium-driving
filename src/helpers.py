@@ -38,7 +38,7 @@ def save_configuration(
 def load_configuration(
     output_directory: str,
     expected_script: str | None = None,
-):
+) -> omegaconf.DictConfig:
     with open(os.path.join(output_directory, "configuration.json"), "r") as file:
         configuration = json.load(file)
     
@@ -48,6 +48,8 @@ def load_configuration(
         
         if script != expected_script:
             raise ValueError(f"Expected script does not match the one in the output directory. Expected: {expected_script}, Found: {script}")
+    
+    configuration = omegaconf.OmegaConf.create(configuration)
     
     return configuration
 
