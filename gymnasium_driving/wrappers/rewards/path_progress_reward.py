@@ -1,5 +1,8 @@
 import gymnasium
+
 import numpy as np
+
+from gymnasium_driving.helpers import wrap_to_pi, closest_polyline_index, polyline_tangent, signed_cte_to_polyline, heading_error_to_polyline
 
 class PathProgressReward(gymnasium.Wrapper):
     """
@@ -58,6 +61,12 @@ class PathProgressReward(gymnasium.Wrapper):
             path_heading = np.arctan2(path_dir[1], path_dir[0])
             heading_error = heading - path_heading
             heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+            
+            # idx = closest_polyline_index(path, ego_position)
+            # cte_signed, idx = signed_cte_to_polyline(path, ego_position, idx=idx)
+            # heading_error = heading_error_to_polyline(path, heading, idx)
+            # # If you want the old "distance only" CTE magnitude:
+            # cte = abs(cte_signed)
 
             # ── 1. Forward velocity along path (PRIMARY reward signal) ──
             # Positive when moving forward along path, negative when going backward.

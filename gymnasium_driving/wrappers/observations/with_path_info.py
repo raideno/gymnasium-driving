@@ -1,13 +1,9 @@
-"""
-Observation wrapper that adds path following information to observations.
-
-Provides waypoint lookahead, cross-track error, and path curvature information
-essential for path following controllers and RL agents.
-"""
-
-import typing
-import numpy as np
 import gymnasium
+
+import numpy as np
+
+from gymnasium_driving.helpers import curvature_windowed
+from gymnasium_driving.helpers import wrap_to_pi, closest_polyline_index, polyline_tangent, signed_cte_to_polyline, heading_error_to_polyline
 
 class WithPathInfo(gymnasium.ObservationWrapper):
     """
@@ -58,8 +54,6 @@ class WithPathInfo(gymnasium.ObservationWrapper):
         
         self.observation_space = gymnasium.spaces.Dict(new_spaces)
         
-        self._path_length = 0.0
-    
     def observation(self, observation: dict) -> dict:
         ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
         ego_heading = self.env.unwrapped.state["yaw"]
@@ -75,31 +69,37 @@ class WithPathInfo(gymnasium.ObservationWrapper):
             return observation
         
         # NOTE: closest point on path
-        distances = np.linalg.norm(path - ego_pos, axis=1)
-        closest_idx = np.argmin(distances)
-        closest_point = path[closest_idx]
+        closest_point_index = np.argmin(np.linalg.norm(path - ego_pos, axis=1))
+        closest_point = path[closest_point_index]
         
         # NOTE: signed cross-track error
-        if closest_idx < len(path) - 1:
-            path_direction = path[closest_idx + 1] - path[closest_idx]
-        elif closest_idx > 0:
-            path_direction = path[closest_idx] - path[closest_idx - 1]
+        if closest_point_index < len(path) - 1:
+            path_direction = path[closest_point_index + 1] - path[closest_point_index]
+        elif closest_point_index > 0:
+            path_direction = path[closest_point_index] - path[closest_point_index - 1]
         else:
             path_direction = np.array([1.0, 0.0])
         path_heading = np.arctan2(path_direction[1], path_direction[0])
-        to_ego = ego_pos - closest_point
-        # Manual 2D cross product to avoid numpy shape issues
-        cross = float(path_direction[0] * to_ego[1] - path_direction[1] * to_ego[0])
-        cte = cross / (np.linalg.norm(path_direction) + 1e-6)
+        
+        # to_ego = ego_pos - closest_point
+        # cross = float(path_direction[0] * to_ego[1] - path_direction[1] * to_ego[0])
+        # NOTE: measure how much ego is to the left or right of the path using cross product
+        cte = float(np.cross(path_direction, ego_pos - closest_point)) / (np.linalg.norm(path_direction) + 1e-6)
+        # cte = cross / (np.linalg.norm(path_direction) + 1e-6)
         
         # NOTE: heading error
         heading_error = ego_heading - path_heading
         heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
         
+        # idx = closest_polyline_index(path, ego_pos)
+        # cte, idx = signed_cte_to_polyline(path, ego_pos, idx=idx)
+        # heading_error = heading_error_to_polyline(path, ego_heading, idx)
+        
         # NOTE: normalized progress along the path
-        progress = closest_idx / max(len(path) - 1, 1)
+        progress = closest_point_index / max(len(path) - 1, 1)
         
         # NOTE: goal distance
+        # TODO: should be measured along the path, not straight line distance
         goal_distance = np.linalg.norm(ego_pos - self.env.unwrapped.goal_pos)
         
         path_info = np.array([cte, heading_error, progress, goal_distance], dtype=np.float32)
@@ -109,53 +109,22 @@ class WithPathInfo(gymnasium.ObservationWrapper):
         rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
         
         for i in range(self.num_waypoints):
-            waypoint_idx = closest_idx + i + 1
+            waypoint_idx = closest_point_index + i + 1
             
             if waypoint_idx >= len(path):
-                # Pad with last waypoint
-                wp = path[-1]
+                # NOTE: pad with last waypoint
+                wp = path[len(path) - 1]
                 current_idx = len(path) - 1
             else:
                 wp = path[waypoint_idx]
                 current_idx = waypoint_idx
             
-            # Transform to ego frame
             rel_pos = rotation @ (wp - ego_pos)
+            curvature = curvature_windowed(path, current_idx, window=3)
             
-            curvature = self._compute_curvature_at_index(path, current_idx)
             waypoints[i] = [rel_pos[0], rel_pos[1], curvature]
         
         observation["path/waypoints"] = waypoints
         observation["path/info"] = path_info
         
         return observation
-    
-    def _compute_curvature_at_index(self, path: np.ndarray, idx: int, window: int = 3) -> float:
-        if len(path) < 3 or idx < 1 or idx >= len(path) - 1:
-            return 0.0
-        
-        start = max(0, idx - window)
-        end = min(len(path), idx + window + 1)
-        
-        if end - start < 3:
-            return 0.0
-        
-        p1 = path[start]
-        p2 = path[idx]
-        p3 = path[min(end - 1, len(path) - 1)]
-        
-        # Three-point curvature formula
-        area = 0.5 * abs(
-            (p2[0] - p1[0]) * (p3[1] - p1[1]) - 
-            (p3[0] - p1[0]) * (p2[1] - p1[1])
-        )
-        
-        d1 = np.linalg.norm(p2 - p1)
-        d2 = np.linalg.norm(p3 - p2)
-        d3 = np.linalg.norm(p3 - p1)
-        
-        denom = d1 * d2 * d3
-        if denom < 1e-6:
-            return 0.0
-        
-        return 4 * area / denom
