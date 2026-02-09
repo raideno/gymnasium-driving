@@ -1,0 +1,19 @@
+_target_: src.environments.random_track.make_environment
+discrete: false
+wrappers:
+  - WithRoadInfo
+  - WithBaseInfo
+  - WithPathInfo
+  - WithObstaclesInfo
+base_with_position: false
+random_obstacles: true
+number_of_obstacles: 4
+random_spawn: true
+random_goal: true
+render_mode: null
+center: [50.0, 50.0]
+dimensions: [80.0, 40.0]
+road_length_range: [55.0, 90.0]
+road_height_range: [35.0, 70.0]
+road_turn_radius_range: [6.0, 14.0]
+road_width_range: [6.0, 10.0]

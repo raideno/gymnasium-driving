@@ -26,6 +26,8 @@ class PathProgressReward(gymnasium.Wrapper):
         
         collision_penalty: float = -10.0,
         truncation_penalty: float = -5.0,
+        obstacle_clearance_weight: float = 0.2,
+        obstacle_clearance_distance: float = 4.0,
     ):
         super().__init__(environment)
         
@@ -38,6 +40,8 @@ class PathProgressReward(gymnasium.Wrapper):
         self.goal_reward = goal_reward
         self.collision_penalty = collision_penalty
         self.truncation_penalty = truncation_penalty
+        self.obstacle_clearance_weight = obstacle_clearance_weight
+        self.obstacle_clearance_distance = obstacle_clearance_distance
 
     def step(self, action):
         observation, _reward, terminated, truncated, info = self.env.step(action)
@@ -83,6 +87,21 @@ class PathProgressReward(gymnasium.Wrapper):
 
             # ── 3. Heading alignment penalty ──
             reward -= self.heading_weight * (heading_error / np.pi) ** 2
+
+        # ── 4. Obstacle proximity penalty ──
+        if self.obstacle_clearance_weight > 0.0 and len(self.env.unwrapped.obstacles) > 0:
+            min_clearance = None
+            for obstacle in self.env.unwrapped.obstacles:
+                center = np.array(obstacle.center, dtype=np.float32)
+                distance = np.linalg.norm(ego_position - center)
+                size = getattr(obstacle, "radius", 0.0)
+                clearance = distance - float(size)
+                if min_clearance is None or clearance < min_clearance:
+                    min_clearance = clearance
+
+            if min_clearance is not None and min_clearance < self.obstacle_clearance_distance:
+                normalized = (self.obstacle_clearance_distance - min_clearance) / self.obstacle_clearance_distance
+                reward -= self.obstacle_clearance_weight * (normalized ** 2)
 
         goal_pos = np.array(self.env.unwrapped.goal_pos, dtype=np.float32)
         goal_dist = np.linalg.norm(ego_position - goal_pos)

@@ -87,7 +87,6 @@ class CarEnvironment(gymnasium.Env):
         self.road_network = road_network
 
         self.world_size, self.world_origin = self._calculate_world_bounds()
-        self.world_size = np.array((100, 100))
         self.render_mode = render_mode
 
         margin_x, margin_y = 40, 40
@@ -220,6 +219,9 @@ class CarEnvironment(gymnasium.Env):
     def reset(self, seed: int | None = None, **kwargs) -> typing.Tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         super().reset(seed=seed)
 
+        # Recompute path each episode to reflect any randomized road/spawn changes
+        self._compute_global_path()
+
         self.state = {
             'x': self.spawn_pos[0],
             'y': self.spawn_pos[1],
@@ -236,9 +238,20 @@ class CarEnvironment(gymnasium.Env):
         self.recorder.reset()
 
         observation = {}
-        info = None
+        info = {}
 
         return observation, info
+
+    def refresh_world_bounds(self) -> None:
+        """
+        Recompute world bounds and rendering scale after modifying road, spawn, or goal.
+        """
+        self.world_size, self.world_origin = self._calculate_world_bounds()
+
+        margin_x, margin_y = 40, 40
+        scale_x = (CarEnvironment.SCREEN_SIZE[0] - margin_x) / self.world_size[0]
+        scale_y = (CarEnvironment.SCREEN_SIZE[1] - margin_y) / self.world_size[1]
+        self.pixels_per_meter = min(scale_x, scale_y)
 
     def step(
         self,
