@@ -1,6 +1,10 @@
 _target_: src.environments.cristal.make_environment
 discrete: ???
-wrappers: ???
+wrappers:
+  - "WithRoadInfo"
+  - "WithBaseInfo"
+  - "WithPathInfo"
+  - "WithObstaclesInfo"
 random_obstacles: true
 number_of_obstacles: 2
 random_spawn: true

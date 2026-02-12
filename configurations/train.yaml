@@ -1,4 +1,5 @@
 total_timesteps: 1_000_000
+seed: 984 # 478
 
 defaults:
   - controller: ???

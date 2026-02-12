@@ -3,6 +3,7 @@ import numpy as np
 
 from gymnasium_driving.components.obstacles import Circle
 
+
 class RandomPathObstacles(gymnasium.Wrapper):
     def __init__(
         self,
@@ -26,9 +27,14 @@ class RandomPathObstacles(gymnasium.Wrapper):
         self.rng = np.random.default_rng(seed)
 
     def reset(self, **kwargs):
+        # Reseed if provided
+        seed = kwargs.get("seed")
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+
         # NOTE: to ensure spawn position is set
         obs = super().reset(**kwargs)
-        
+
         path = self.unwrapped.path
         if path is None or len(path) < 2:
             self.unwrapped.obstacles = []
@@ -38,18 +44,18 @@ class RandomPathObstacles(gymnasium.Wrapper):
         total_length = cumulative[-1]
 
         spawn_pos = self.unwrapped.spawn_pos
-        
+
         # Find the closest point on the path to the spawn position
         distances = np.linalg.norm(path - spawn_pos, axis=1)
         spawn_idx = np.argmin(distances)
         spawn_distance_along_path = cumulative[spawn_idx]
-        
+
         # Obstacles should only be spawned ahead of the car
         valid_start = spawn_distance_along_path + self.exclude_start
         valid_end = total_length - self.exclude_goal
-        
+
         obstacles = []
-        
+
         def sample_position() -> np.ndarray:
             if valid_start < valid_end:
                 t = self.rng.uniform(valid_start, valid_end)
@@ -90,11 +96,14 @@ class RandomPathObstacles(gymnasium.Wrapper):
                 break
             if not placed:
                 radius = self.rng.uniform(self.min_radius, self.max_radius)
-                obstacles.append(Circle(center=tuple(sample_position()), radius=radius))
+                obstacles.append(
+                    Circle(center=tuple(sample_position()), radius=radius)
+                )
 
         self.unwrapped.obstacles = obstacles
 
         return obs
+
 
 class RandomRoadNetwork(gymnasium.Wrapper):
     """
@@ -152,6 +161,11 @@ class RandomRoadNetwork(gymnasium.Wrapper):
         return road_network
 
     def reset(self, **kwargs):
+        # Reseed if provided
+        seed = kwargs.get("seed")
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+
         road_network = self._sample_track()
         self.unwrapped.road_network = road_network
 
@@ -164,6 +178,7 @@ class RandomRoadNetwork(gymnasium.Wrapper):
         self.unwrapped.refresh_world_bounds()
 
         return super().reset(**kwargs)
+
 
 class RandomGoal(gymnasium.Wrapper):
     """
@@ -186,6 +201,11 @@ class RandomGoal(gymnasium.Wrapper):
         self.rng = np.random.default_rng(seed)
 
     def reset(self, **kwargs):
+        # Reseed if provided
+        seed = kwargs.get("seed")
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+
         obs = super().reset(**kwargs)
 
         path = getattr(self.unwrapped, "path", None)
@@ -199,6 +219,7 @@ class RandomGoal(gymnasium.Wrapper):
             self.unwrapped.goal_radius = float(self.goal_radius)
 
         return obs
+
 
 class RandomSpawn(gymnasium.Wrapper):
     """
@@ -214,23 +235,26 @@ class RandomSpawn(gymnasium.Wrapper):
         # What fraction of the path is eligible as a spawn point.
         # 0.0-1.0 — e.g. 0.5 means the first half of the path.
         path_fraction: float = 0.25,
-        
         lateral_noise: float = 1.0,
         heading_noise: float = 0.15,
-        
         seed=None,
     ):
         super().__init__(env)
-        
+
         self.path_fraction = path_fraction
         self.lateral_noise = lateral_noise
         self.heading_noise = heading_noise
-        
+
         self.rng = np.random.default_rng(seed)
 
     def reset(self, **kwargs):
+        # Reseed if provided
+        seed = kwargs.get("seed")
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+
         path = self.unwrapped.path
-        
+
         if path is not None and len(path) >= 2:
             max_idx = max(1, int(len(path) * self.path_fraction))
             idx = self.rng.integers(0, max_idx)
@@ -253,9 +277,7 @@ class RandomSpawn(gymnasium.Wrapper):
             )
 
             # NOTE: heading noise
-            heading += self.rng.uniform(
-                -self.heading_noise, self.heading_noise
-            )
+            heading += self.rng.uniform(-self.heading_noise, self.heading_noise)
 
             self.unwrapped.spawn_pos = spawn_pos.astype(np.float32)
             self.unwrapped.spawn_heading = heading

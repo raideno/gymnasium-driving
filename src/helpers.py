@@ -86,3 +86,32 @@ def instantiate_configuration(
             controller.model = controller.model.load(best_model_path, env=environment)
     
     return controller, environment
+
+def get_last_run_directory(
+    base_directory: str,
+    script: str | None = None,
+):
+    day_directories = sorted(os.listdir(base_directory))
+    
+    if not day_directories:
+        raise ValueError(f"No runs found in base directory: {base_directory}")
+    
+    day_directory = os.path.join(base_directory, day_directories[-1])
+    run_directories = sorted(os.listdir(day_directory))
+    
+    if not run_directories:
+        raise ValueError(f"No runs found in day directory: {day_directory}")
+    
+    for run_dir in reversed(run_directories):
+        full_path = os.path.join(day_directory, run_dir)
+        
+        if script is None:
+            return full_path
+        
+        script_path = os.path.join(full_path, "script")
+        if os.path.exists(script_path):
+            with open(script_path, "r") as file:
+                if file.read() == script:
+                    return full_path
+    
+    raise ValueError(f"No matching run found for script: {script}")

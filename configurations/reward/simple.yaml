@@ -1,1 +1,0 @@
-_target_: gymnasium_driving.wrappers.rewards.simple_reward.SimpleRewardWrapper

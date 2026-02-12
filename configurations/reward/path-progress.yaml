@@ -1,7 +1,0 @@
-_target_: gymnasium_driving.wrappers.rewards.path_progress_reward.PathProgressReward
-target_velocity: 5.0
-velocity_weight: 1.0
-cte_weight: 0.3
-heading_weight: 0.2
-obstacle_clearance_weight: 0.3
-obstacle_clearance_distance: 4.0

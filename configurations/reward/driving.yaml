@@ -1,0 +1,11 @@
+_target_: gymnasium_driving.wrappers.rewards.driving.DrivingReward
+progress_weight: 10.0
+cte_weight: 1.0
+heading_weight: 0.5
+obstacle_weight: 2.0
+speed_weight: 0.1
+target_speed: 5.0
+safe_distance: 4.0
+collision_penalty: -100.0
+goal_reward: 100.0
+off_road_penalty: -50.0

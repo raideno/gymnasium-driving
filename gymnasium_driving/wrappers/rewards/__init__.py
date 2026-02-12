@@ -1,7 +1,5 @@
-from .simple_reward import SimpleRewardWrapper
-from .path_progress_reward import PathProgressReward
+from .driving import DrivingReward
 
 __all__ = [
-    "SimpleRewardWrapper",
-    "PathProgressReward",
+    "DrivingReward"
 ]
