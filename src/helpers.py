@@ -19,6 +19,7 @@ import os
 import json
 import hydra
 import omegaconf
+import sys
 
 def save_configuration(
     configuration: omegaconf.DictConfig,
@@ -34,6 +35,9 @@ def save_configuration(
     if script is not None:
         with open(os.path.join(output_directory, "script"), "w") as file:
             file.write(script)
+    
+    with open(os.path.join(output_directory, "command"), "w") as file:
+        file.write(" ".join(sys.argv))
 
 def load_configuration(
     output_directory: str,

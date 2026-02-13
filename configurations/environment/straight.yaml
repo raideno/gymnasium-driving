@@ -1,0 +1,22 @@
+_target_: src.environments.straight.make_environment
+discrete: ???
+render_mode: null
+road_length: 80.0
+road_width: 8.0
+road_y: 50.0
+road_x_start: 10.0
+target_velocity: 1.5
+min_obstacles: 2
+max_obstacles: 5
+min_radius: 0.6
+max_radius: 1.2
+lateral_range: 2.5
+min_x_spacing: 8.0
+min_passage_width: 2.5
+wrappers:
+  - WithRoadInfo
+  - WithBaseInfo
+  - WithPathInfo
+  - WithObstaclesInfo
+base_with_position: false
+max_steps: 600

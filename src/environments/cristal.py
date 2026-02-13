@@ -36,7 +36,8 @@ def make_environment(
     road_height_range: typing.Tuple[float, float] = (35.0, 70.0),
     road_turn_radius_range: typing.Tuple[float, float] = (6.0, 14.0),
     road_width_range: typing.Tuple[float, float] = (6.0, 10.0),
-    max_steps: int = 500
+    max_steps: int = 500,
+    **kwargs
 ):
     """
     Randomized road environment with domain randomization of paths and obstacles.
