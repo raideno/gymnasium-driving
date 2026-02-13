@@ -118,6 +118,7 @@ def make_environment(
     road_y: float = 50.0,
     road_x_start: float = 10.0,
     target_velocity: float = 2.5,
+    n_steering: int = 15,
     min_obstacles: int = 2,
     max_obstacles: int = 5,
     min_radius: float = 0.6,
@@ -171,7 +172,7 @@ def make_environment(
         env = gymnasium_driving.wrappers.actions.DiscreteSteeringOnlyActionWrapper(
             env,
             target_velocity=target_velocity,
-            n_steering=10,
+            n_steering=n_steering,
         )
     else:
         env = gymnasium_driving.wrappers.actions.SteeringOnlyActionWrapper(

@@ -6,6 +6,7 @@ road_width: 8.0
 road_y: 50.0
 road_x_start: 10.0
 target_velocity: 1.5
+n_steering: 15
 min_obstacles: 2
 max_obstacles: 5
 min_radius: 0.6

@@ -125,3 +125,45 @@ def get_last_run_directory(
                     return full_path
     
     raise ValueError(f"No matching run found for script: {script}")
+
+import os
+import hydra
+import typing
+import omegaconf
+
+def _load_prefill(configuration: omegaconf.DictConfig, key: str):
+    if not (key in list(configuration.keys())):
+        raise KeyError(f"Key '{key}' not found in configuration.")
+
+    value = configuration[key]
+
+    if not (isinstance(value, list) or isinstance(value, omegaconf.ListConfig)):
+        raise ValueError(f"Expected a list for key '{key}', but got {type(value).__name__}.")
+
+    prefilled = []
+
+    for item in value:
+        prefilled.append(omegaconf.OmegaConf.load(os.path.join("configurations/environment", f"{item}.yaml")))
+
+    return prefilled
+
+def prefill(key: str):
+    """Decorator factory for pre-loading environment configurations.
+    Usage (decorator-only):
+    - @prefill('environments')
+    - @prefill('environments', verbose=True)
+    The resulting decorator expects a function whose first argument is a
+    configuration mapping (e.g., an OmegaConf DictConfig) and will replace
+    the value at `key` with the prefilled list before calling the function.
+    """
+
+    def decorator(function: typing.Callable):
+        def wrapper(configuration: omegaconf.DictConfig, *args, **kwargs):
+            names = list(configuration[key]) if key in configuration else []
+            configuration[key] = _load_prefill(configuration, key)
+            
+            return function(configuration, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

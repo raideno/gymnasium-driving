@@ -2,12 +2,13 @@ import gymnasium
 import numpy as np
 
 class PathProgressReward(gymnasium.Wrapper):
-    TRUNCATION_PENALTY = -5.0
-    COLLISION_PENALTY = -10.0
+    TRUNCATION_PENALTY = -10.0
+    COLLISION_PENALTY = -30.0
     GOAL_REWARD = 100.0
     
     HEADING_WEIGHT = 0.4
     CTE_WEIGHT = 0.6
+    PROGRESS_WEIGHT = 1.0
     
     def __init__(
         self,
@@ -16,6 +17,18 @@ class PathProgressReward(gymnasium.Wrapper):
         super().__init__(environment)
         
         self.env = environment
+        self._prev_goal_distance = None
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        ego_position = np.array(
+            [self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]],
+            dtype=np.float32,
+        )
+        self._prev_goal_distance = float(
+            np.linalg.norm(ego_position - np.array(self.env.unwrapped.goal_pos, dtype=np.float32))
+        )
+        return obs, info
 
     def step(self, action):
         observation, _reward, terminated, truncated, info = self.env.step(action)
@@ -24,6 +37,14 @@ class PathProgressReward(gymnasium.Wrapper):
 
         path = self.env.unwrapped.path
         reward = 0.0
+
+        # NOTE: forward progress reward — positive when getting closer to the goal
+        goal_pos = np.array(self.env.unwrapped.goal_pos, dtype=np.float32)
+        goal_dist = float(np.linalg.norm(ego_position - goal_pos))
+        if self._prev_goal_distance is not None:
+            progress = self._prev_goal_distance - goal_dist
+            reward += PathProgressReward.PROGRESS_WEIGHT * progress
+        self._prev_goal_distance = goal_dist
 
         if path is not None and len(path) >= 2:
             cte = self.env.unwrapped.state["cte"]
@@ -35,8 +56,6 @@ class PathProgressReward(gymnasium.Wrapper):
 
             # NOTE: heading penalty
             reward -= PathProgressReward.HEADING_WEIGHT * (heading_error / np.pi) ** 2
-
-        goal_dist = np.linalg.norm(ego_position - np.array(self.env.unwrapped.goal_pos, dtype=np.float32))
 
         if terminated:
             if goal_dist <= self.env.unwrapped.goal_radius:

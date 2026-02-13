@@ -1,3 +1,4 @@
+import omegaconf
 import stable_baselines3
 
 class DQNController:
@@ -15,10 +16,14 @@ class DQNController:
         # MlpPolicy accepts only one input / one dimension observations ?
         # self.model = stable_baselines3.DQN("MlpPolicy", self.env)
         
+        model_kwargs = kwargs.get("model_kwargs", {})
+        if isinstance(model_kwargs, omegaconf.DictConfig):
+            model_kwargs = omegaconf.OmegaConf.to_container(model_kwargs, resolve=True)
+        
         self.model = stable_baselines3.DQN(
             "MultiInputPolicy",
             self.env,
-            **kwargs.get("model_kwargs", {})
+            **model_kwargs
         )
         
     def learn(

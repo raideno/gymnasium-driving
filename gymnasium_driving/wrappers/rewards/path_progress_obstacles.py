@@ -14,9 +14,9 @@ class PathProgressObstaclesReward(PathProgressReward):
     actually terminates the episode.
     """
 
-    OBSTACLE_WEIGHT = 0.5
+    OBSTACLE_WEIGHT = 0.8
     # Distance (meters) within which the penalty starts
-    OBSTACLE_DANGER_RADIUS = 6.0
+    OBSTACLE_DANGER_RADIUS = 3.5
 
     def __init__(
         self,
