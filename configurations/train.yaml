@@ -3,7 +3,8 @@ seed: 984 # 478
 
 defaults:
   - controller: ???
-  - environment: ???
+  - environment@train: ???
+  - environment@eval: ???
   - reward: ???
   - defaults
   - _self_

@@ -3,7 +3,6 @@ import gymnasium
 import numpy as np
 
 from gymnasium_driving.helpers import curvature_windowed
-from gymnasium_driving.helpers import wrap_to_pi, closest_polyline_index, polyline_tangent, signed_cte_to_polyline, heading_error_to_polyline
 
 class WithPathInfo(gymnasium.ObservationWrapper):
     """
@@ -70,9 +69,9 @@ class WithPathInfo(gymnasium.ObservationWrapper):
             observation["path/info"] = path_info
             return observation
         
-        closest_point_index = closest_polyline_index(path, ego_pos)
-        cte, closest_point_index = signed_cte_to_polyline(path, ego_pos, idx=closest_point_index)
-        heading_error = heading_error_to_polyline(path, ego_heading, closest_point_index)
+        closest_point_index = self.env.unwrapped.state["closest_path_idx"]
+        cte = self.env.unwrapped.state["cte"]
+        heading_error = self.env.unwrapped.state["heading_error"]
         
         # NOTE: normalized progress along the path
         progress = closest_point_index / max(len(path) - 1, 1)

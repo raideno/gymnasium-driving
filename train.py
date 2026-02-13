@@ -1,28 +1,11 @@
 import os
 import hydra
 import omegaconf
-import gymnasium
 import stable_baselines3
 
 from src.helpers import save_configuration
 
 from evaluate import evaluate, plot_training_results
-
-class FixedSeedWrapper(gymnasium.Wrapper):
-    """
-    Always uses the same seed when calling reset().
-    """
-    def __init__(
-        self,
-        env,
-        seed
-    ):
-        super().__init__(env)
-        self.seed = seed
-
-    def reset(self, **kwargs):
-        kwargs["seed"] = self.seed
-        return super().reset(**kwargs)
                              
 @hydra.main(version_base=None, config_path="configurations", config_name="train")
 def main(configuration: omegaconf.DictConfig):
@@ -33,28 +16,24 @@ def main(configuration: omegaconf.DictConfig):
     print("[output_directory]:", output_directory)
     
         
-    train_environment = hydra.utils.instantiate(configuration.environment)
+    train_environment = hydra.utils.instantiate(configuration.train)
     train_environment = hydra.utils.instantiate(
         configuration.reward,
         environment=train_environment,
     )
     train_environment = stable_baselines3.common.monitor.Monitor(
         env=train_environment,
-        filename=os.path.join(output_directory, "logs", "monitor.csv"),
+        filename=os.path.join(output_directory, "logs", "train_monitor.csv"),
     )
     
-    eval_environment = hydra.utils.instantiate(configuration.environment)
+    eval_environment = hydra.utils.instantiate(configuration.eval)
     eval_environment = hydra.utils.instantiate(
         configuration.reward,
         environment=eval_environment,
     )
-    eval_environment = FixedSeedWrapper(
-        eval_environment,
-        seed=configuration.seed
-    )
     eval_environment = stable_baselines3.common.monitor.Monitor(
         env=eval_environment,
-        filename=os.path.join(output_directory, "logs", "monitor.csv"),
+        filename=os.path.join(output_directory, "logs", "eval_monitor.csv"),
     )
     
     logger = stable_baselines3.common.logger.configure(

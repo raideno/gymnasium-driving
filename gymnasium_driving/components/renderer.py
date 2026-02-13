@@ -4,6 +4,7 @@ import pygame
 import numpy as np
 
 import gymnasium_driving.components.constants as constants
+from gymnasium_driving.helpers import polyline_tangent
 
 class Renderer:
     def __init__(
@@ -53,6 +54,7 @@ class Renderer:
         
         if env.state is not None:
             self._draw_car(env)
+            self._draw_path_tracking_debug(env)
         
         self._draw_spawn(env)
         
@@ -73,6 +75,36 @@ class Renderer:
         return np.transpose(
             np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
         )
+
+    def _draw_path_tracking_debug(self, env) -> None:
+        state = env.state
+        if state is None or env.path is None or len(env.path) < 2:
+            return
+
+        closest_idx = int(state.get("closest_path_idx", 0))
+        closest_idx = max(0, min(closest_idx, len(env.path) - 1))
+
+        ego_xy = np.array([state["x"], state["y"]], dtype=np.float32)
+        closest_xy = np.array(env.path[closest_idx], dtype=np.float32)
+
+        ego_screen = env._world_to_screen(ego_xy)
+        closest_screen = env._world_to_screen(closest_xy)
+
+        # CTE visual: line from ego to closest path point
+        pygame.draw.line(self.screen, (255, 140, 0), ego_screen, closest_screen, 2)
+        pygame.draw.circle(self.screen, (255, 140, 0), closest_screen, 4)
+
+        # Heading visual: ego heading vs path tangent at closest point
+        c, s = np.cos(state["yaw"]), np.sin(state["yaw"])
+        ego_heading = np.array([c, s], dtype=np.float32)
+        path_heading = polyline_tangent(env.path, closest_idx)
+
+        arrow_len = 3.0  # meters
+        ego_heading_tip = env._world_to_screen(ego_xy + ego_heading * arrow_len)
+        path_heading_tip = env._world_to_screen(ego_xy + path_heading * arrow_len)
+
+        pygame.draw.line(self.screen, (30, 120, 255), ego_screen, ego_heading_tip, 3)
+        pygame.draw.line(self.screen, (60, 180, 75), ego_screen, path_heading_tip, 3)
     
     def _draw_grid(self, env) -> None:
         # TODO: externalize
@@ -257,6 +289,9 @@ class Renderer:
             f"Position: ({x:.1f}m, {y:.1f}m)",
             f"Heading: {np.degrees(theta):.1f} deg",
             f"Velocity: {v:.1f} m/s ({v * 3.6:.1f} km/h)",
+            f"CTE: {state.get('cte', 0.0):.2f} m",
+            f"Heading error: {np.degrees(state.get('heading_error', 0.0)):.1f} deg",
+            f"Closest path idx: {int(state.get('closest_path_idx', 0))}",
         ]
         
         if env.road_network is not None:

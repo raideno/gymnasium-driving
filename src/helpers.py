@@ -69,23 +69,29 @@ def instantiate_configuration(
     Returns:
         Tuple of (controller, environment)
     """
-    environment = hydra.utils.instantiate(configuration.environment)
-    environment = hydra.utils.instantiate(
+    train_environment = hydra.utils.instantiate(configuration.train)
+    train_environment = hydra.utils.instantiate(
         configuration.reward,
-        environment=environment,
+        environment=train_environment,
+    )
+    
+    eval_environment = hydra.utils.instantiate(configuration.train)
+    eval_environment = hydra.utils.instantiate(
+        configuration.reward,
+        environment=eval_environment,
     )
     
     controller = hydra.utils.instantiate(
         configuration.controller,
-        environment=environment,
+        environment=train_environment,
     )
     
     if load_best_model and output_directory is not None:
         best_model_path = os.path.join(output_directory, "best_model.zip")
         if os.path.exists(best_model_path):
-            controller.model = controller.model.load(best_model_path, env=environment)
+            controller.model = controller.model.load(best_model_path, env=train_environment)
     
-    return controller, environment
+    return controller, train_environment, eval_environment
 
 def get_last_run_directory(
     base_directory: str,

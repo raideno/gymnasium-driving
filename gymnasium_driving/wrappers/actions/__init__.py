@@ -1,10 +1,10 @@
-from .discrete import DiscreteActionWrapper, MultiDiscreteActionWrapper, CoarseDiscreteActionWrapper, FlattenMultiDiscreteWrapper
-from .continuous import ContinuousActionWrapper
+from .discrete import DiscreteActionWrapper
+from .steering_only import SteeringOnlyActionWrapper
+from .steering_only import DiscreteSteeringOnlyActionWrapper
 
 __all__ = [
     "DiscreteActionWrapper",
-    "MultiDiscreteActionWrapper",
-    "CoarseDiscreteActionWrapper",
-    "FlattenMultiDiscreteWrapper",
     "ContinuousActionWrapper",
+    "SteeringOnlyActionWrapper",
+    "DiscreteSteeringOnlyActionWrapper",
 ]

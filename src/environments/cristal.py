@@ -5,13 +5,12 @@ import gymnasium as gym
 import gymnasium_driving
 import gymnasium_driving.wrappers
 
-from src.environments.random import (
+from src.environments.helpers.random import (
     RandomPathObstacles,
     RandomSpawn,
     RandomRoadNetwork,
     RandomGoal,
 )
-
 
 def make_environment(
     discrete: bool,
@@ -37,6 +36,7 @@ def make_environment(
     road_height_range: typing.Tuple[float, float] = (35.0, 70.0),
     road_turn_radius_range: typing.Tuple[float, float] = (6.0, 14.0),
     road_width_range: typing.Tuple[float, float] = (6.0, 10.0),
+    max_steps: int = 500
 ):
     """
     Randomized road environment with domain randomization of paths and obstacles.
@@ -61,9 +61,16 @@ def make_environment(
     )
 
     if discrete:
-        env = gymnasium_driving.wrappers.actions.DiscreteActionWrapper(env)
+        env = gymnasium_driving.wrappers.actions.DiscreteSteeringOnlyActionWrapper(
+            env,
+            target_velocity=5.0,
+            n_steering=10
+        )
     else:
-        env = gymnasium_driving.wrappers.actions.ContinuousActionWrapper(env)
+        env = gymnasium_driving.wrappers.actions.SteeringOnlyActionWrapper(
+            env,
+            target_velocity=5.0,
+        )
 
     for wrapper_name in wrappers:
         if wrapper_name == "WithRoadInfo":
@@ -116,6 +123,6 @@ def make_environment(
         )
 
     # 1000 steps x 0.1 s = 100 s
-    env = gym.wrappers.TimeLimit(env, max_episode_steps=1000)
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=max_steps)
 
     return env

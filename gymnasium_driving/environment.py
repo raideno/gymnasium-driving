@@ -10,6 +10,10 @@ from gymnasium_driving.components.renderer import Renderer
 from gymnasium_driving.components.overlay import OverlayManager
 from gymnasium_driving.components.performance import PerformanceTracker
 from gymnasium_driving.components.recorder import EpisodeRecorder, StepData
+from gymnasium_driving.helpers import (
+    signed_cte_to_polyline,
+    heading_error_to_polyline,
+)
 
 from gymnasium_driving.models.bicycle import BicycleModel
 from gymnasium_driving.models.ackerman import AckermannModel
@@ -132,6 +136,22 @@ class CarEnvironment(gymnasium.Env):
         )
 
         self.simulation_time = 0.0
+
+    def _compute_path_tracking_metrics(
+        self,
+        ego_pos: np.ndarray,
+        ego_yaw: float,
+    ) -> typing.Tuple[float, float, int]:
+        if self.path is None or len(self.path) < 2:
+            return 0.0, 0.0, 0
+
+        cte, closest_idx = signed_cte_to_polyline(self.path, ego_pos)
+        heading_error = heading_error_to_polyline(
+            self.path,
+            ego_yaw,
+            closest_idx,
+        )
+        return cte, heading_error, int(closest_idx)
 
     def _calculate_world_bounds(
         self,
@@ -264,7 +284,18 @@ class CarEnvironment(gymnasium.Env):
             "y": self.spawn_pos[1],
             "yaw": self.spawn_heading,
             "velocity": 0.0,
+            "cte": 0.0,
+            "heading_error": 0.0,
+            "closest_path_idx": 0,
         }
+
+        cte, heading_error, closest_idx = self._compute_path_tracking_metrics(
+            ego_pos=np.array([self.state["x"], self.state["y"]], dtype=np.float32),
+            ego_yaw=float(self.state["yaw"]),
+        )
+        self.state["cte"] = cte
+        self.state["heading_error"] = heading_error
+        self.state["closest_path_idx"] = closest_idx
 
         self.simulation_time = 0.0
         for obstacle in self.obstacles:
@@ -350,6 +381,15 @@ class CarEnvironment(gymnasium.Env):
             CarEnvironment.MAX_VELOCITY,
         )
 
+        ego_pos = np.array([self.state["x"], self.state["y"]], dtype=np.float32)
+        cte, heading_error, closest_idx = self._compute_path_tracking_metrics(
+            ego_pos=ego_pos,
+            ego_yaw=float(self.state["yaw"]),
+        )
+        self.state["cte"] = cte
+        self.state["heading_error"] = heading_error
+        self.state["closest_path_idx"] = closest_idx
+
         self.simulation_time += CarEnvironment.DELTA_TIME
 
         for obstacle in self.obstacles:
@@ -364,7 +404,6 @@ class CarEnvironment(gymnasium.Env):
         truncated = False
         reward = 0.0
 
-        ego_pos = np.array([self.state["x"], self.state["y"]], dtype=np.float32)
         goal_dist = np.linalg.norm(ego_pos - self.goal_pos)
         if goal_dist <= self.goal_radius:
             terminated = True

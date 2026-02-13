@@ -1,14 +1,32 @@
 _target_: src.environments.cristal.make_environment
 discrete: ???
-wrappers:
-  - "WithRoadInfo"
-  - "WithBaseInfo"
-  - "WithPathInfo"
-  - "WithObstaclesInfo"
-random_obstacles: true
+random_obstacles: false
 number_of_obstacles: 2
 random_spawn: true
+random_goal: true
 render_mode: null
-dimensions: [80.0, 40.0]
-
-# python train.py --multirun environment=cristal environment.discrete=true environment.wrappers=\[WithBaseInfo,WithPathInfo,WithObstaclesInfo\],\[WithRoadInfo,WithBaseInfo,WithPathInfo,WithObstaclesInfo\] controller=dqn,ppo-discrete,trpo-discrete reward=path-progress,simple
+dimensions:
+  - 80.0
+  - 40.0
+center:
+  - 50.0
+  - 50.0
+wrappers:
+  - WithRoadInfo
+  - WithBaseInfo
+  - WithPathInfo
+  - WithObstaclesInfo
+base_with_position: false
+road_length_range:
+  - 55.0
+  - 90.0
+road_height_range:
+  - 35.0
+  - 70.0
+road_turn_radius_range:
+  - 6.0
+  - 14.0
+road_width_range:
+  - 6.0
+  - 10.0
+max_steps: 500

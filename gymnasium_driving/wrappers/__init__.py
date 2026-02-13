@@ -14,10 +14,8 @@ from .rewards import (
 
 from .actions import (
     DiscreteActionWrapper,
-    MultiDiscreteActionWrapper,
-    CoarseDiscreteActionWrapper,
-    FlattenMultiDiscreteWrapper,
-    ContinuousActionWrapper,
+    SteeringOnlyActionWrapper,
+    DiscreteSteeringOnlyActionWrapper,
 )
 
 __all__ = [
@@ -36,8 +34,6 @@ __all__ = [
     
     # Actions
     "DiscreteActionWrapper",
-    "MultiDiscreteActionWrapper",
-    "CoarseDiscreteActionWrapper",
-    "FlattenMultiDiscreteWrapper",
-    "ContinuousActionWrapper",
+    "SteeringOnlyActionWrapper",
+    "DiscreteSteeringOnlyActionWrapper",
 ]
