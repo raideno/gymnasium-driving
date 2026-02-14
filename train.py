@@ -3,24 +3,31 @@ import hydra
 import omegaconf
 import stable_baselines3
 
-from src.helpers import save_configuration
+import src.helpers as helpers
 
 from evaluate import evaluate, plot_training_results
                              
 @hydra.main(version_base=None, config_path="configurations", config_name="train")
+@helpers.prefill(key="wrappers", search_path="observations")
 def main(configuration: omegaconf.DictConfig):
-    save_configuration(configuration, "train")
+    print("[configuration]:", configuration)
+    
+    helpers.save_configuration(configuration, "train")
     
     output_directory = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     
     print("[output_directory]:", output_directory)
-    
         
     train_environment = hydra.utils.instantiate(configuration.train)
     train_environment = hydra.utils.instantiate(
         configuration.reward,
         environment=train_environment,
     )
+    for wrapper in configuration.wrappers:
+        train_environment = hydra.utils.instantiate(
+            wrapper,
+            environment=train_environment
+        )
     train_environment = stable_baselines3.common.monitor.Monitor(
         env=train_environment,
         filename=os.path.join(output_directory, "logs", "train_monitor.csv"),
@@ -31,6 +38,11 @@ def main(configuration: omegaconf.DictConfig):
         configuration.reward,
         environment=eval_environment,
     )
+    for wrapper in configuration.wrappers:
+        eval_environment = hydra.utils.instantiate(
+            wrapper,
+            environment=eval_environment
+        )
     eval_environment = stable_baselines3.common.monitor.Monitor(
         env=eval_environment,
         filename=os.path.join(output_directory, "logs", "eval_monitor.csv"),

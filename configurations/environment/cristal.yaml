@@ -1,9 +1,6 @@
 _target_: src.environments.cristal.make_environment
 discrete: ???
-random_obstacles: false
-number_of_obstacles: 2
-random_spawn: true
-random_goal: true
+number_of_obstacles: ???
 render_mode: null
 dimensions:
   - 80.0
@@ -11,22 +8,4 @@ dimensions:
 center:
   - 50.0
   - 50.0
-wrappers:
-  - WithRoadInfo
-  - WithBaseInfo
-  - WithPathInfo
-  - WithObstaclesInfo
-base_with_position: false
-road_length_range:
-  - 55.0
-  - 90.0
-road_height_range:
-  - 35.0
-  - 70.0
-road_turn_radius_range:
-  - 6.0
-  - 14.0
-road_width_range:
-  - 6.0
-  - 10.0
 max_steps: 500

@@ -1,5 +1,10 @@
 total_timesteps: 1_000_000
 seed: 984 # 478
+wrappers:
+  - with_path_info
+  - with_obstacles_info
+  - with_base_info
+  - with_road_info
 
 defaults:
   - controller: ???

@@ -8,7 +8,6 @@ import gymnasium_driving.wrappers
 
 from gymnasium_driving.components.obstacles import Circle
 
-
 class RandomStraightObstacles(gym.Wrapper):
     """
     Places a random number of circular obstacles along a straight road,
@@ -113,10 +112,6 @@ class RandomStraightObstacles(gym.Wrapper):
 def make_environment(
     discrete: bool,
     render_mode: typing.Literal["rgb_array", "human"] | None = None,
-    road_length: float = 80.0,
-    road_width: float = 8.0,
-    road_y: float = 50.0,
-    road_x_start: float = 10.0,
     target_velocity: float = 2.5,
     n_steering: int = 15,
     min_obstacles: int = 2,
@@ -126,45 +121,29 @@ def make_environment(
     lateral_range: float = 2.5,
     min_x_spacing: float = 8.0,
     min_passage_width: float = 2.5,
-    wrappers: typing.List[
-        typing.Literal[
-            "WithRoadInfo", "WithBaseInfo", "WithPathInfo", "WithObstaclesInfo"
-        ]
-    ] = [
-        "WithRoadInfo",
-        "WithBaseInfo",
-        "WithPathInfo",
-        "WithObstaclesInfo",
-    ],
-    base_with_position: bool = False,
     max_steps: int = 600,
     **kwargs,
 ):
     """
     Straight road environment with random obstacles for obstacle-avoidance training.
     """
-    spawn_x = road_x_start + 5.0   # offset so the car body is fully on the road
-    goal_x = road_x_start + road_length - 5.0
-
-    road = gymnasium_driving.components.roads.Road(
-        segments=[
-            gymnasium_driving.components.roads.StraightSegment(
-                start=(road_x_start, road_y),
-                heading=0.0,  # pointing right
-                length=road_length,
-            )
-        ],
-        width=road_width,
-    )
-
     env = gymnasium_driving.CarEnvironment(
         model="bicycle",
         road_network=gymnasium_driving.components.roads.RoadNetwork(
-            roads=[road],
+            roads=[gymnasium_driving.components.roads.Road(
+                segments=[
+                    gymnasium_driving.components.roads.StraightSegment(
+                        start=(10.0, 50.0),
+                        heading=0.0,
+                        length=100,
+                    )
+                ],
+                width=8.0,
+            )],
         ),
         render_mode=render_mode,
-        spawn=((spawn_x, road_y), 0.0),
-        goal=((goal_x, road_y), 3.0),
+        proportion=(0.90, 0.00),
+        noise=(0.0, 0.0),
         obstacles=[],
     )
 
@@ -179,20 +158,6 @@ def make_environment(
             env,
             target_velocity=target_velocity,
         )
-
-    for wrapper_name in wrappers:
-        if wrapper_name == "WithRoadInfo":
-            env = gymnasium_driving.wrappers.observations.WithRoadInfo(env)
-        elif wrapper_name == "WithBaseInfo":
-            env = gymnasium_driving.wrappers.observations.WithBaseInfo(
-                env, with_position=base_with_position
-            )
-        elif wrapper_name == "WithPathInfo":
-            env = gymnasium_driving.wrappers.observations.WithPathInfo(env)
-        elif wrapper_name == "WithObstaclesInfo":
-            env = gymnasium_driving.wrappers.observations.WithObstaclesInfo(env)
-        else:
-            raise ValueError(f"Unknown wrapper name: {wrapper_name}")
 
     env = RandomStraightObstacles(
         env,

@@ -61,6 +61,7 @@ def instantiate_configuration(
     configuration: omegaconf.DictConfig,
     output_directory: str | None = None,
     load_best_model: bool = True,
+    base_dir: str = "../configurations"
 ):
     """
     Instantiate environment, reward wrapper, and controller from configuration.
@@ -84,6 +85,27 @@ def instantiate_configuration(
         configuration.reward,
         environment=eval_environment,
     )
+    
+    if "wrappers" in configuration.keys():
+        apply_prefill(
+            configuration=configuration,
+            key="wrappers",
+            search_path="observations",
+            raise_if_missing=True,
+            base_dir=base_dir
+        )
+        
+        for wrapper in configuration.wrappers:
+            train_environment = hydra.utils.instantiate(
+                wrapper,
+                environment=train_environment
+            )
+        
+        for wrapper in configuration.wrappers:
+            eval_environment = hydra.utils.instantiate(
+                wrapper,
+                environment=eval_environment
+            )
     
     controller = hydra.utils.instantiate(
         configuration.controller,
@@ -127,41 +149,161 @@ def get_last_run_directory(
     raise ValueError(f"No matching run found for script: {script}")
 
 import os
-import hydra
 import typing
+import functools
+
+import hydra
 import omegaconf
 
-def _load_prefill(configuration: omegaconf.DictConfig, key: str):
-    if not (key in list(configuration.keys())):
-        raise KeyError(f"Key '{key}' not found in configuration.")
 
-    value = configuration[key]
+def get_config_path() -> str:
+    config_sources = hydra.core.hydra_config.HydraConfig.get().runtime.config_sources
 
-    if not (isinstance(value, list) or isinstance(value, omegaconf.ListConfig)):
-        raise ValueError(f"Expected a list for key '{key}', but got {type(value).__name__}.")
+    if not config_sources:
+        raise ValueError("No configuration sources found.")
 
-    prefilled = []
+    for config_source in config_sources:
+        if config_source.provider == "main":
+            return config_source.path
 
+    raise ValueError("Main configuration source not found.")
+
+
+def _split_path(path: str) -> list[str]:
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("key must be a non-empty string")
+    return [p for p in path.split(".") if p]
+
+
+def _dot_to_fs_path(dot_path: str) -> str:
+    return os.path.join(*_split_path(dot_path))
+
+
+def _get_container_and_leaf(
+    configuration: omegaconf.DictConfig, path: str
+) -> tuple[typing.Any, str]:
+    parts = _split_path(path)
+    if len(parts) == 1:
+        return configuration, parts[0]
+
+    container: typing.Any = configuration
+    for part in parts[:-1]:
+        if not (isinstance(container, (dict, omegaconf.DictConfig)) and part in container):
+            raise KeyError(f"Key path '{path}' not found (missing '{part}').")
+        container = container[part]
+
+    leaf = parts[-1]
+    return container, leaf
+
+
+def _load_prefill(
+    configuration: omegaconf.DictConfig,
+    key_path: str,
+    base_dir: str,
+    search_path: str | None,
+) -> list[omegaconf.DictConfig]:
+    container, leaf = _get_container_and_leaf(configuration, key_path)
+
+    if not (isinstance(container, (dict, omegaconf.DictConfig)) and leaf in container):
+        raise KeyError(f"Key '{key_path}' not found in configuration.")
+
+    value = container[leaf]
+    if not isinstance(value, (list, omegaconf.ListConfig)):
+        raise ValueError(
+            f"Expected a list for key '{key_path}', but got {type(value).__name__}."
+        )
+
+    relative_dir = _dot_to_fs_path(key_path) if search_path is None else search_path
+    target_dir = os.path.join(base_dir, relative_dir)
+
+    prefilled: list[omegaconf.DictConfig] = []
     for item in value:
-        prefilled.append(omegaconf.OmegaConf.load(os.path.join("configurations/environment", f"{item}.yaml")))
+        prefilled.append(
+            omegaconf.OmegaConf.load(os.path.join(target_dir, f"{item}.yaml"))
+        )
 
     return prefilled
 
-def prefill(key: str):
+
+def apply_prefill(
+    configuration: omegaconf.DictConfig,
+    key: str,
+    *,
+    search_path: str | None = None,
+    raise_if_missing: bool = False,
+    base_dir: str | None = None,
+) -> omegaconf.DictConfig:
+    """Apply the prefill operation directly (non-decorator API).
+
+    Replaces the list at `key` with loaded configs.
+
+    Args:
+        configuration: Hydra/OmegaConf DictConfig to mutate.
+        key: Dot-path key to prefill (e.g. "environments", "reward.observations").
+        search_path: If None, loads from `<base_dir>/<key-as-path>/`.
+                    If provided, loads from `<base_dir>/<search_path>/`.
+        raise_if_missing: If True, missing keys raise; otherwise no-op.
+        base_dir: If provided, overrides `get_config_path()` for locating YAMLs.
+
+    Returns:
+        The (mutated) configuration, for convenience.
+    """
+    effective_base_dir = get_config_path() if base_dir is None else base_dir
+
+    try:
+        container, leaf = _get_container_and_leaf(configuration, key)
+    except KeyError:
+        if raise_if_missing:
+            raise
+        return configuration
+
+    if not (isinstance(container, (dict, omegaconf.DictConfig)) and leaf in container):
+        if raise_if_missing:
+            raise KeyError(f"Key '{key}' not found in configuration.")
+        return configuration
+
+    container[leaf] = _load_prefill(
+        configuration=configuration,
+        base_dir=effective_base_dir,
+        key_path=key,
+        search_path=search_path,
+    )
+    return configuration
+
+
+def prefill(
+    key: str,
+    search_path: str | None = None,
+    raise_if_missing: bool = False,
+):
     """Decorator factory for pre-loading environment configurations.
-    Usage (decorator-only):
-    - @prefill('environments')
-    - @prefill('environments', verbose=True)
-    The resulting decorator expects a function whose first argument is a
-    configuration mapping (e.g., an OmegaConf DictConfig) and will replace
-    the value at `key` with the prefilled list before calling the function.
+
+    - `key` supports nested dot-path keys, e.g.:
+        - @prefill("environments")
+        - @prefill("reward.observations")
+
+    - `search_path` controls where YAML files are loaded from:
+        - If None (default): loads from `get_config_path()/<key-as-path>/`,
+          where <key-as-path> is `key` with dots replaced by path separators.
+          Example: key="reward.observations" => ".../reward/observations/<item>.yaml"
+        - If provided: loads from `get_config_path()/search_path/<item>.yaml"
+
+    - `raise_if_missing` controls missing key behavior:
+        - If False (default): skip prefill when `key` is missing.
+        - If True: raise an exception when `key` is missing.
+
+    Replaces the list at `key` with loaded configs before calling the function.
     """
 
     def decorator(function: typing.Callable):
+        @functools.wraps(function)
         def wrapper(configuration: omegaconf.DictConfig, *args, **kwargs):
-            names = list(configuration[key]) if key in configuration else []
-            configuration[key] = _load_prefill(configuration, key)
-            
+            apply_prefill(
+                configuration,
+                key,
+                search_path=search_path,
+                raise_if_missing=raise_if_missing,
+            )
             return function(configuration, *args, **kwargs)
 
         return wrapper

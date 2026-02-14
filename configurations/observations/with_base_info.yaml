@@ -1,0 +1,2 @@
+_target_: gymnasium_driving.wrappers.observations.with_base_info.WithBaseInfo
+with_position: false
