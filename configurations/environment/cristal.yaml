@@ -1,6 +1,5 @@
 _target_: src.environments.cristal.make_environment
 discrete: ???
-number_of_obstacles: ???
 render_mode: null
 dimensions:
   - 80.0

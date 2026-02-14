@@ -218,9 +218,18 @@ def _load_prefill(
 
     prefilled: list[omegaconf.DictConfig] = []
     for item in value:
-        prefilled.append(
-            omegaconf.OmegaConf.load(os.path.join(target_dir, f"{item}.yaml"))
-        )
+        # NOTE: item is already a dict/DictConfig, use it directly (already resolved by Hydra)
+        if isinstance(item, (dict, omegaconf.DictConfig)):
+            prefilled.append(item if isinstance(item, omegaconf.DictConfig) else omegaconf.OmegaConf.create(item))
+        # NOTE: item is a string, load the corresponding YAML file
+        elif isinstance(item, str):
+            prefilled.append(
+                omegaconf.OmegaConf.load(os.path.join(target_dir, f"{item}.yaml"))
+            )
+        else:
+            raise ValueError(
+                f"Expected string or dict for wrapper item, but got {type(item).__name__}: {item}"
+            )
 
     return prefilled
 

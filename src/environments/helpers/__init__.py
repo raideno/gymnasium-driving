@@ -1,5 +1,5 @@
-from .random_path_obstacles import RandomPathObstacles
+from .random import RandomWaypointObstacles
 
 __all__ = [
-    "RandomPathObstacles",
+    "RandomWaypointObstacles",
 ]

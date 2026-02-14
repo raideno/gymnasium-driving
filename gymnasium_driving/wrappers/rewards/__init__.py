@@ -1,5 +1,7 @@
-from .driving import DrivingReward
+from .path_progress import PathProgressReward
+from .path_progress_obstacles import PathProgressObstaclesReward
 
 __all__ = [
-    "DrivingReward"
+    "PathProgressReward",
+    "PathProgressObstaclesReward",
 ]

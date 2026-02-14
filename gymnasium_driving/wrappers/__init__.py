@@ -9,7 +9,8 @@ from .observations import (
 )
 
 from .rewards import (
-    DrivingReward,
+    PathProgressReward,
+    PathProgressObstaclesReward,
 )
 
 from .actions import (
@@ -30,7 +31,8 @@ __all__ = [
     "WithPathInfo",
     
     # Reward wrappers
-    "DrivingReward",
+    "PathProgressReward",
+    "PathProgressObstaclesReward",
     
     # Actions
     "DiscreteActionWrapper",

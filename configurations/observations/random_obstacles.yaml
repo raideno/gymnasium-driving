@@ -1,0 +1,8 @@
+_target_: src.environments.helpers.random.RandomWaypointObstacles
+num_obstacles: 3
+min_radius: 0.6
+max_radius: 1.2
+exclude_start_k: 3
+exclude_end_k: 3
+min_lateral_offset: 0.0
+max_lateral_offset: 2.0
