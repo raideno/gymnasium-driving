@@ -2,13 +2,17 @@ import gymnasium
 import numpy as np
 
 class PathProgressReward(gymnasium.Wrapper):
-    TRUNCATION_PENALTY = -10.0
-    COLLISION_PENALTY = -30.0
-    GOAL_REWARD = 100.0
+    TRUNCATION_PENALTY = -5.0
+    COLLISION_PENALTY = -15.0
+    GOAL_REWARD = 50.0
     
     HEADING_WEIGHT = 0.4
     CTE_WEIGHT = 0.6
     PROGRESS_WEIGHT = 1.0
+    # Small per-step reward for staying alive — makes longer episodes
+    # inherently worth more, giving a smooth gradient instead of a
+    # binary success/failure signal from terminal rewards alone.
+    ALIVE_BONUS = 0.1
     
     def __init__(
         self,
@@ -37,6 +41,9 @@ class PathProgressReward(gymnasium.Wrapper):
 
         path = self.env.unwrapped.path
         reward = 0.0
+
+        # NOTE: per-step alive bonus
+        reward += PathProgressReward.ALIVE_BONUS
 
         # NOTE: forward progress reward — positive when getting closer to the goal
         goal_pos = np.array(self.env.unwrapped.goal_pos, dtype=np.float32)

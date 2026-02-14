@@ -1,17 +1,19 @@
 _target_: src.controllers.dqn.DQNController
 model_kwargs:
-  learning_rate: 0.0003
+  learning_rate: 0.0001
   buffer_size: 500_000
   learning_starts: 10_000
   batch_size: 256
   gamma: 0.99
-  # faster exploration decay — with better reward shaping the
-  # agent can exploit earlier
   exploration_fraction: 0.3
   exploration_final_eps: 0.05
-  # target network update frequency — less frequent updates
-  # improve stability
-  target_update_interval: 1000
+  # less frequent target network syncs → more stable Q-targets
+  target_update_interval: 2500
+  # clip gradients to prevent large destabilising updates
+  max_grad_norm: 5.0
+  # update every 4 steps instead of every step — reduces
+  # overfitting to recent transitions
+  train_freq: 4
   verbose: 1
   policy_kwargs:
     net_arch:
