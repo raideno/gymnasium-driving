@@ -10,11 +10,9 @@ from .observations import (
 
 from .rewards import (
     PathProgressReward,
-    PathProgressObstaclesReward,
 )
 
 from .actions import (
-    DiscreteActionWrapper,
     SteeringOnlyActionWrapper,
     DiscreteSteeringOnlyActionWrapper,
 )
@@ -32,10 +30,8 @@ __all__ = [
     
     # Reward wrappers
     "PathProgressReward",
-    "PathProgressObstaclesReward",
     
     # Actions
-    "DiscreteActionWrapper",
     "SteeringOnlyActionWrapper",
     "DiscreteSteeringOnlyActionWrapper",
 ]

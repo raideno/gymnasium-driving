@@ -38,10 +38,10 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         
         # TODO: add rel_x > 0
         # TODO: add time to collision ttc
-        # [exists, rel_x, rel_y, distance, radius/size]
         self.obstacle_instance_dimension = 5
         
         new_spaces = dict(self.observation_space.spaces)
+        # [exists, rel_x, rel_y, distance, radius/size]
         new_spaces["obstacles/instances"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -100,12 +100,11 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         obstacle_data = obstacle_data[:self.max_obstacles]
         
         # NOTE: pad with zeros if fewer than max_obstacles
-        num_detected = len(obstacle_data)
         while len(obstacle_data) < self.max_obstacles:
             obstacle_data.append([0.0] * self.obstacle_instance_dimension)
         
         observation["obstacles/instances"] = np.array(obstacle_data, dtype=np.float32)
-        observation["obstacles/num_obstacles_detected"] = np.array([num_detected], dtype=np.float32)
+        observation["obstacles/num_obstacles_detected"] = np.array([len(obstacle_data)], dtype=np.float32)
         
         return observation
     

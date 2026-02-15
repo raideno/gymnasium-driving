@@ -2,7 +2,6 @@ import gymnasium
 
 import numpy as np
 
-
 class SteeringOnlyActionWrapper(gymnasium.ActionWrapper):
     def __init__(
         self,

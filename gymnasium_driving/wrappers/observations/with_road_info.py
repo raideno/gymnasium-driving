@@ -3,7 +3,7 @@ import gymnasium
 import numpy as np
 
 from gymnasium_driving.helpers import curvature_windowed
-from gymnasium_driving.helpers import wrap_to_pi, closest_polyline_index, polyline_tangent, signed_cte_to_polyline, heading_error_to_polyline
+from gymnasium_driving.helpers import closest_polyline_index, signed_cte_to_polyline, heading_error_to_polyline
 
 class WithRoadInfo(gymnasium.ObservationWrapper):
     """
@@ -22,8 +22,6 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         environment: gymnasium.Env,
     ):
         super().__init__(environment)
-        
-        self.env = environment
         
         new_spaces = dict(self.observation_space.spaces)
         
@@ -83,6 +81,5 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
     def _get_road_centerline(self, road, num_points: int = 100) -> np.ndarray:
         all_points = []
         for segment in road.segments:
-            points = segment.get_centerline_points(num_points // len(road.segments))
-            all_points.extend(points)
+            all_points.extend(segment.get_centerline_points(num_points // len(road.segments)))
         return np.array(all_points, dtype=np.float32)
