@@ -5,7 +5,6 @@ wrappers:
   - with_obstacles_info
   - with_base_info
   - with_road_info
-  - random_obstacles
 
 defaults:
   - controller: ???

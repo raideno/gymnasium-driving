@@ -98,13 +98,14 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         # NOTE: sort by distance and take closest
         obstacle_data.sort(key=lambda x: x[3])
         obstacle_data = obstacle_data[:self.max_obstacles]
+        detected_count = len(obstacle_data)
         
         # NOTE: pad with zeros if fewer than max_obstacles
         while len(obstacle_data) < self.max_obstacles:
             obstacle_data.append([0.0] * self.obstacle_instance_dimension)
         
         observation["obstacles/instances"] = np.array(obstacle_data, dtype=np.float32)
-        observation["obstacles/num_obstacles_detected"] = np.array([len(obstacle_data)], dtype=np.float32)
+        observation["obstacles/num_obstacles_detected"] = np.array([detected_count], dtype=np.float32)
         
         return observation
     

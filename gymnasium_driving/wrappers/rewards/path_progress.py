@@ -9,13 +9,14 @@ from gymnasium_driving.components.obstacles import Circle, Rectangle
 @dataclass(frozen=True)
 class PathProgressRewardConfig:
     truncation_penalty: float = -5.0
-    collision_penalty: float = -15.0
+    collision_penalty: float = -20.0
     goal_reward: float = 50.0
 
-    heading_weight: float = 0.4
-    cte_weight: float = 0.6
-    progress_weight: float = 1.0
-    alive_bonus: float = 0.1
+    heading_weight: float = 0.2
+    cte_weight: float = 0.3
+    progress_weight: float = 2.0
+    alive_bonus: float = 0.05
+    no_progress_penalty: float = -0.02
 
     obstacle_weight: float = 0.8
     obstacle_danger_radius: float = 3.5
@@ -42,6 +43,7 @@ class PathProgressReward(gymnasium.Wrapper):
         self.env = environment
         self.configuration = configuration or PathProgressRewardConfig()
         self._prev_goal_distance: Optional[float] = None
+        self._prev_path_idx: Optional[int] = None
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
@@ -52,6 +54,7 @@ class PathProgressReward(gymnasium.Wrapper):
         )
         goal_pos = np.array(self.env.unwrapped.goal_pos, dtype=np.float32)
         self._prev_goal_distance = float(np.linalg.norm(ego_position - goal_pos))
+        self._prev_path_idx = int(self.env.unwrapped.state.get("closest_path_idx", 0))
 
         return obs, info
 
@@ -69,16 +72,21 @@ class PathProgressReward(gymnasium.Wrapper):
         # NOTE: per-step alive bonus
         reward += self.configuration.alive_bonus
 
-        # NOTE: forward progress reward — positive when getting closer to the goal
+        # NOTE: progress reward based on monotonic index along sampled path.
+        # This is much more stable than euclidean distance-to-goal on curved tracks.
+        current_path_idx = int(self.env.unwrapped.state.get("closest_path_idx", 0))
+        if self._prev_path_idx is None:
+            self._prev_path_idx = current_path_idx
+
+        progress_idx = max(0, current_path_idx - self._prev_path_idx)
+        reward += self.configuration.progress_weight * float(progress_idx)
+        if progress_idx == 0:
+            reward += self.configuration.no_progress_penalty
+
+        self._prev_path_idx = current_path_idx
+
         goal_pos = np.array(self.env.unwrapped.goal_pos, dtype=np.float32)
         goal_distance = float(np.linalg.norm(ego_position - goal_pos))
-
-        if self._prev_goal_distance is not None:
-            # TODO: compute progress as number of waypoints passed along the path
-            # progress based on goal distance is incorrect
-            progress = self._prev_goal_distance - goal_distance
-            reward += self.configuration.progress_weight * progress
-
         self._prev_goal_distance = goal_distance
 
         if path is not None and len(path) >= 2:
