@@ -25,11 +25,11 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
         
         new_spaces = dict(self.observation_space.spaces)
         
-        # NOTE: [cross_track_error, dist_left, dist_right, heading_error, curvature, is_off_road]
+        # NOTE: [dist_left, dist_right]
         new_spaces["road/info"] = gymnasium.spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(6,),
+            shape=(2,),
             dtype=np.float32,
         )
         
@@ -37,9 +37,8 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
     
     def observation(self, observation: dict) -> dict:
         ego_pos = np.array([self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]], dtype=np.float32)
-        ego_heading = self.env.unwrapped.state["yaw"]
         
-        road_info = np.zeros(6, dtype=np.float32)
+        road_info = np.zeros(2, dtype=np.float32)
         
         if self.env.unwrapped.road_network is None or len(self.env.unwrapped.road_network.roads) == 0:
             observation["road/info"] = road_info
@@ -54,24 +53,14 @@ class WithRoadInfo(gymnasium.ObservationWrapper):
             observation["road/info"] = road_info
             return observation
         
-        closest_idx = closest_polyline_index(centerline, ego_pos)
-        cross_track_error, closest_idx = signed_cte_to_polyline(centerline, ego_pos, idx=closest_idx)
-        heading_error = heading_error_to_polyline(centerline, ego_heading, closest_idx)
+        cross_track_error, closest_idx = signed_cte_to_polyline(centerline, ego_pos, idx=closest_polyline_index(centerline, ego_pos))
         
         dist_left = half_width - cross_track_error
         dist_right = half_width + cross_track_error
         
-        curvature = curvature_windowed(centerline, closest_idx, window=5)
-        
-        is_off_road = 1.0 if self.env.unwrapped.road_network.is_off_road(ego_pos) else 0.0
-        
         road_info = np.array([
-            cross_track_error,
             dist_left,
             dist_right,
-            heading_error,
-            curvature,
-            is_off_road,
         ], dtype=np.float32)
         
         observation["road/info"] = road_info
