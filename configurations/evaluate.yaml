@@ -1,0 +1,15 @@
+# NOTE: load the environment and pretrained controller from the output path
+output_path: ???
+n_eval_episodes: 20
+deterministic: true
+render: false
+
+defaults:
+  # NOTE: override the controller
+  # - controller: ???
+  - controller: null
+  - environment: null
+  - observations: null
+  - reward: null
+  - defaults
+  - _self_

@@ -11,7 +11,7 @@ from evaluate import evaluate
 @hydra.main(version_base=None, config_path="configurations", config_name="test")
 @helpers.prefill(key="train.observations", search_path="observations")
 @helpers.prefill(key="eval.observations", search_path="observations")
-def main(configuration: omegaconf.DictConfig):
+def test(configuration: omegaconf.DictConfig):
     print("[configuration]:", configuration)
     print("[config_path]:", helpers.get_config_path())
     print("[output]:", hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
@@ -39,4 +39,4 @@ def main(configuration: omegaconf.DictConfig):
     # print(environment.observation_space)
     
 if __name__ == "__main__":
-    main()
+    test()

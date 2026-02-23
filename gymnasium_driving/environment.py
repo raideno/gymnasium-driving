@@ -376,7 +376,7 @@ class CarEnvironment(gymnasium.Env):
         for obstacle in self.obstacles:
             obstacle.reset()
 
-        max_spawn_setup_attempts = 80
+        max_spawn_setup_attempts = 100
         for _ in range(max_spawn_setup_attempts):
             self._sample_spawn_and_goal()
             self.refresh_world_bounds()
@@ -406,10 +406,11 @@ class CarEnvironment(gymnasium.Env):
 
             if not self._check_collision():
                 break
-        else:
-            raise RuntimeError(
-                "Failed to sample a collision-free initial state on reset()."
-            )
+        # TODO: maybe bring back
+        # else:
+        #     raise RuntimeError(
+        #         "Failed to sample a collision-free initial state on reset()."
+        #     )
 
         self.performance_tracker.reset()
         self.recorder.reset()

@@ -1,24 +1,24 @@
+from gymnasium_driving.environment import CarEnvironment
+
 import numpy as np
 
 class PurePursuitController:
     def __init__(
         self,
-        environment,
+        environment: CarEnvironment,
         lookahead_distance: float = 5.0,
-        wheelbase: float = 2.5,
         target_velocity: float = 5.0,
         kp_velocity: float = 1.0,
-        max_steering: float = np.pi / 4,
-        max_acceleration: float = 3.0,
         **kwargs,
     ):
         self.env = environment
-        self.lookahead_distance = lookahead_distance
-        self.wheelbase = wheelbase
-        self.target_velocity = target_velocity
         self.kp_velocity = kp_velocity
-        self.max_steering = max_steering
-        self.max_acceleration = max_acceleration
+        self.target_velocity = target_velocity
+        
+        self.lookahead_distance = lookahead_distance
+        self.wheelbase = self.env.unwrapped.WHEELBASE
+        self.max_steering = self.env.unwrapped.MAX_STEERING
+        self.max_acceleration = self.env.unwrapped.MAX_ACCELERATION
         
         self._lookahead_point_ego: np.ndarray | None = None
         

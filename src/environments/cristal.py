@@ -8,9 +8,9 @@ import gymnasium_driving.wrappers
 def make_environment(
     discrete: bool,
     render_mode: typing.Literal["rgb_array", "human"] | None = None,
-    dimensions: typing.Tuple[float, float] = (80.0, 40.0),
-    center: typing.Tuple[float, float] = (50.0, 50.0),
-    max_steps: int = 500,
+    target_velocity: float = 2.5,
+    n_steering: int = 15,
+    max_steps: int = 600,
     **kwargs
 ):
     """
@@ -21,9 +21,9 @@ def make_environment(
         road_network=gymnasium_driving.components.roads.RoadNetwork(
             roads=[
                 gymnasium_driving.components.roads.create_rectangular_track(
-                    center=center,
-                    length=dimensions[0],
-                    height=dimensions[1],
+                    center=(50, 50),
+                    length=80,
+                    height=40,
                     turn_radius=8.0,
                     width=8.0,
                 )
@@ -38,16 +38,15 @@ def make_environment(
     if discrete:
         env = gymnasium_driving.wrappers.actions.DiscreteSteeringOnlyActionWrapper(
             env,
-            target_velocity=5.0,
-            n_steering=10
+            target_velocity=target_velocity,
+            n_steering=n_steering,
         )
     else:
         env = gymnasium_driving.wrappers.actions.SteeringOnlyActionWrapper(
             env,
-            target_velocity=5.0,
+            target_velocity=target_velocity,
         )
 
-    # 1000 steps x 0.1 s = 100 s
     env = gym.wrappers.TimeLimit(env, max_episode_steps=max_steps)
 
     return env

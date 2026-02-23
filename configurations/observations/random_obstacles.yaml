@@ -1,4 +1,4 @@
-_target_: src.environments.helpers.random.RandomWaypointObstacles
+_target_: src.wrappers.random.RandomWaypointObstacles
 num_obstacles: 3
 min_radius: 0.6
 max_radius: 1.2
