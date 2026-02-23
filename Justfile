@@ -39,3 +39,6 @@ train-cristal:
 		reward=path_progress \
 		total_timesteps=1000000 \
 		wrappers=\[with_path_info,with_obstacles_info,with_base_info,with_road_info\]
+
+clean:
+	rm -rf outputs

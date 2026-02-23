@@ -77,12 +77,10 @@ def train(configuration: omegaconf.DictConfig):
         os.path.join(output_directory, "logs"),
         ["stdout", "csv", "json", "tensorboard"]
     )
-    
     controller = hydra.utils.instantiate(
         configuration.controller,
         environment=train_environment,
     )
-    
     # NOTE: might not work with deterministic controllers as they don't have a .model
     controller.model.set_logger(logger)
     

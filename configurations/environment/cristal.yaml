@@ -1,4 +1,6 @@
 _target_: src.environments.cristal.make_environment
 discrete: ???
 render_mode: null
-max_steps: 500
+target_velocity: 4.5
+n_steering: 15
+max_steps: 750
