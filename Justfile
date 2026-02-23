@@ -1,6 +1,11 @@
 set shell := ["bash","-cu"]
 
-activate := "source .venv/bin/activate"
+python := ".venv/bin/python"
+
+setup:
+	python -m venv .venv
+	.venv/bin/pip install -e .
+	.venv/bin/pip install git+https://github.com/winstxnhdw/KinematicBicycleModel.git
 
 # npx repomix \
 #     --ignore "\
@@ -10,12 +15,11 @@ activate := "source .venv/bin/activate"
 #         gymnasium_driving/components/renderer.py,\
 #         gymnasium_driving/components/performance.py
 #     "
-
 pack:
 	npx repomix --ignore "notebooks/*" --output code.local.xml
 
 train-straight:
-	HYDRA_FULL_ERROR=1 python train.py \
+	HYDRA_FULL_ERROR=1 {{python}} train.py \
 		environment@train=straight \
 		environment@eval=straight \
 		train.discrete=true \
@@ -26,7 +30,7 @@ train-straight:
 		wrappers=\[with_path_info,with_obstacles_info,with_base_info,with_road_info,random_obstacles\]
 
 train-cristal:
-	HYDRA_FULL_ERROR=1 python train.py \
+	HYDRA_FULL_ERROR=1 {{python}} train.py \
 		environment@train=cristal \
 		environment@eval=cristal \
 		train.discrete=true \
