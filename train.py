@@ -1,12 +1,19 @@
 import os
 import hydra
 import omegaconf
+import hydra.core
+import hydra.core.hydra_config
+
 import stable_baselines3
+import stable_baselines3.common
+import stable_baselines3.common.monitor
+import stable_baselines3.common.logger
+import stable_baselines3.common.callbacks
 
 import src.helpers as helpers
 
 from evaluate import evaluate, plot_training_results
-                             
+
 @hydra.main(version_base=None, config_path="configurations", config_name="train")
 @helpers.prefill(key="wrappers", search_path="observations")
 def main(configuration: omegaconf.DictConfig):
