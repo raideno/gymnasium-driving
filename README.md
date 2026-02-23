@@ -1,53 +1,22 @@
 # Gymnasium Driving Environment
 
+To install the environment:
 ```bash
 pip install git+https://github.com/raideno/gymnasium-driving-environment.git
 ```
 
+## Development
+
+First you need to have [Just](https://github.com/casey/just) installed in your computer.
+
+1. Setup the python environment and required libraries:
 ```bash
-pip install -e .
+just setup
 ```
 
---- --- ---
-
-**Train a path following RL algorithm:**
+2. Start a training:
 ```bash
-HYDRA_FULL_ERROR=1 python train.py \
-    environment@train=cristal \
-    environment@eval=cristal \
-    train.discrete=true \
-    train.number_of_obstacles=0 \
-    eval.number_of_obstacles=0  \
-    eval.discrete=True \
-    total_timesteps=1000000 \
-    reward=path_progress \
-    controller=dqn
+just train-straight
+# or
+just train-cristal
 ```
-
-**Train a obstacle avoidance path following RL algorithm:**
-```bash
-HYDRA_FULL_ERROR=1 python train.py \
-  environment@train=straight \
-  controller=dqn \
-  reward=path_progress_obstacles \
-  total_timesteps=1000000 \
-  train.discrete=true \
-  environment@eval=straight \
-  eval.discrete=true
-```
-
---- --- ---
-
-- PPO. Plusieurs type de trajectoire, une ligne direct et une sin.
-- In isaac lab they use skrl library with ppo algorithm.
-
-- A la prochaine réunion on selectionne sur quel environements je travaille.
-
-- [ ] Zone de sécurité autour de l'obstacle pour la reward function. Selon la largeur de route, etc.
-
-- [ ] Generalization.
-
---- ---
-
-- [ ] Faire en sorte que l'algo generalie.
-- [ ] Implementer les differentes autres trajectoires.
