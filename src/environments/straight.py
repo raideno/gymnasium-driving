@@ -6,6 +6,7 @@ import gymnasium_driving
 import gymnasium_driving.components
 import gymnasium_driving.components.roads
 import gymnasium_driving.environment
+import gymnasium_driving.factories
 import gymnasium_driving.wrappers
 
 
@@ -36,9 +37,9 @@ def make_environment(
                 )
             ],
         ),
-        positions_factory=gymnasium_driving.environment.make_centerline_positions_factory(),
+        positions_factory=gymnasium_driving.factories.make_centerline_positions_factory(),
+        obstacles_factory=gymnasium_driving.factories.make_random_obstacles_factory(),
         render_mode=render_mode,
-        obstacles_factory=lambda e: [],
     )
 
     if discrete:
