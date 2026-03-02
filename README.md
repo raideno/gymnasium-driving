@@ -11,8 +11,6 @@ pip install git+https://github.com/raideno/gymnasium-driving-environment.git
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-# TODO: remove the bicycle model dependency, see if there is any impact on performance.
-.venv/bin/pip install git+https://github.com/winstxnhdw/KinematicBicycleModel.git
 ```
 
 ## Environment Development
