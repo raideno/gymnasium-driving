@@ -1,0 +1,1 @@
+_target_: gymnasium_driving.wrappers.rewards.smooth_path_progress.SmoothPathProgressReward
