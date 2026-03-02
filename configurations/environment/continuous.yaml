@@ -1,0 +1,17 @@
+# @package _global_
+
+cristal:
+  _target_: src.environments.cristal.make_environment
+  discrete: false
+  render_mode: null
+  target_velocity: 4.5
+  n_steering: 15
+  max_steps: 750
+
+straight:
+  _target_: src.environments.straight.make_environment
+  discrete: false
+  render_mode: null
+  target_velocity: 4.5
+  n_steering: 15
+  max_steps: 750

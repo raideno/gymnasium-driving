@@ -20,6 +20,15 @@ import src.helpers as helpers
 print("[.env]:", dotenv.load_dotenv(dotenv_path=".env"))
 
 
+def _make_env(env_config, reward_config, wrappers, monitor_path):
+    env = hydra.utils.instantiate(env_config, render_mode="rgb_array")
+    env = hydra.utils.instantiate(reward_config, environment=env)
+    for wrapper in wrappers:
+        env = hydra.utils.instantiate(wrapper, environment=env)
+    env = stable_baselines3.common.monitor.Monitor(env=env, filename=monitor_path)
+    return env
+
+
 @hydra.main(version_base=None, config_path="configurations", config_name="train")
 @helpers.prefill(key="wrappers", search_path="observations")
 def train(configuration: omegaconf.DictConfig):
@@ -31,23 +40,21 @@ def train(configuration: omegaconf.DictConfig):
 
     print("[output_directory]:", output_directory)
 
-    train_environment = hydra.utils.instantiate(
-        configuration.train, render_mode="rgb_array"
-    )
-    train_environment = hydra.utils.instantiate(
-        configuration.reward,
-        environment=train_environment,
-    )
-    for wrapper in configuration.wrappers:
-        train_environment = hydra.utils.instantiate(
-            wrapper, environment=train_environment
-        )
-    train_environment = stable_baselines3.common.monitor.Monitor(
-        env=train_environment,
-        filename=os.path.join(output_directory, "logs", "train_monitor.csv"),
-    )
+    env_configs = [
+        ("cristal", configuration.cristal),
+        ("straight", configuration.straight),
+    ]
+
     train_environment = stable_baselines3.common.vec_env.DummyVecEnv(
-        [lambda: train_environment]
+        [
+            lambda name=name, cfg=cfg: _make_env(
+                cfg,
+                configuration.reward,
+                configuration.wrappers,
+                os.path.join(output_directory, "logs", f"train_monitor_{name}.csv"),
+            )
+            for name, cfg in env_configs
+        ]
     )
     train_environment = stable_baselines3.common.vec_env.VecVideoRecorder(
         train_environment,
@@ -56,29 +63,16 @@ def train(configuration: omegaconf.DictConfig):
         video_length=200,
     )
 
-    eval_environment = hydra.utils.instantiate(
-        configuration.eval, render_mode="rgb_array"
-    )
-    eval_environment = hydra.utils.instantiate(
-        configuration.reward,
-        environment=eval_environment,
-    )
-    for wrapper in configuration.wrappers:
-        eval_environment = hydra.utils.instantiate(
-            wrapper, environment=eval_environment
-        )
-    eval_environment = stable_baselines3.common.monitor.Monitor(
-        env=eval_environment,
-        filename=os.path.join(output_directory, "logs", "eval_monitor.csv"),
-    )
     eval_environment = stable_baselines3.common.vec_env.DummyVecEnv(
-        [lambda: eval_environment]
-    )
-    eval_environment = stable_baselines3.common.vec_env.VecVideoRecorder(
-        eval_environment,
-        os.path.join(output_directory, "evaluation_videos"),
-        record_video_trigger=lambda episode: episode % 100_000 == 0,
-        video_length=200,
+        [
+            lambda name=name, cfg=cfg: _make_env(
+                cfg,
+                configuration.reward,
+                configuration.wrappers,
+                os.path.join(output_directory, "logs", f"eval_monitor_{name}.csv"),
+            )
+            for name, cfg in env_configs
+        ]
     )
 
     logger = stable_baselines3.common.logger.configure(
@@ -114,15 +108,9 @@ def train(configuration: omegaconf.DictConfig):
                     eval_env=eval_environment,
                     n_eval_episodes=5,
                     eval_freq=10_000,
-                    # (str | None) – Path to a folder where the evaluations (evaluations.npz) will be saved. It will be updated at each evaluation.
-                    # NOTE: .npz is a numpy archive file that can be loaded with np.load() to access the evaluation results.
                     log_path=os.path.join(output_directory),
                     best_model_save_path=os.path.join(output_directory),
                     deterministic=True,
-                    # (bool) – Whether the evaluation should use a stochastic or deterministic actions.
-                    # NOTE: if False, the agent will use the same action as during training (which might be stochastic if the policy is stochastic). Sampling.
-                    # If True, the agent will use the deterministic version of the policy (if it exists). Greedy.
-                    # deterministic,
                 ),
                 wandb.integration.sb3.WandbCallback(
                     verbose=2,
@@ -132,7 +120,6 @@ def train(configuration: omegaconf.DictConfig):
                 ),
             ]
         ),
-        # "log_interval": 100, # log every 100 episodes
     )
 
 

@@ -20,7 +20,5 @@ just setup
 
 2. Start a training:
 ```bash
-just train-straight
-# or
-just train-cristal
+just train
 ```

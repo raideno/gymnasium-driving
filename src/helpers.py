@@ -12,6 +12,8 @@ import IPython.display
 import omegaconf
 import PIL
 import PIL.Image
+import stable_baselines3.common.monitor
+import stable_baselines3.common.vec_env
 
 
 # NOTE: render_mode must be set to rgb_array in the environment
@@ -82,18 +84,6 @@ def instantiate_configuration(
     Returns:
         Tuple of (controller, environment)
     """
-    train_environment = hydra.utils.instantiate(configuration.train)
-    train_environment = hydra.utils.instantiate(
-        configuration.reward,
-        environment=train_environment,
-    )
-
-    eval_environment = hydra.utils.instantiate(configuration.train)
-    eval_environment = hydra.utils.instantiate(
-        configuration.reward,
-        environment=eval_environment,
-    )
-
     if "wrappers" in configuration.keys():
         apply_prefill(
             configuration=configuration,
@@ -103,15 +93,23 @@ def instantiate_configuration(
             base_dir=base_dir,
         )
 
-        for wrapper in configuration.wrappers:
-            train_environment = hydra.utils.instantiate(
-                wrapper, environment=train_environment
-            )
+    def _make_single_env(env_cfg):
+        env = hydra.utils.instantiate(env_cfg)
+        env = hydra.utils.instantiate(configuration.reward, environment=env)
+        if "wrappers" in configuration.keys():
+            for wrapper in configuration.wrappers:
+                env = hydra.utils.instantiate(wrapper, environment=env)
+        return env
 
-        for wrapper in configuration.wrappers:
-            eval_environment = hydra.utils.instantiate(
-                wrapper, environment=eval_environment
-            )
+    env_configs = [configuration.cristal, configuration.straight]
+
+    train_environment = stable_baselines3.common.vec_env.DummyVecEnv(
+        [lambda cfg=cfg: _make_single_env(cfg) for cfg in env_configs]
+    )
+
+    eval_environment = stable_baselines3.common.vec_env.DummyVecEnv(
+        [lambda cfg=cfg: _make_single_env(cfg) for cfg in env_configs]
+    )
 
     controller = hydra.utils.instantiate(
         configuration.controller,

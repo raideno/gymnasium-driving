@@ -1,6 +1,0 @@
-_target_: src.environments.straight.make_environment
-discrete: ???
-render_mode: null
-target_velocity: 4.5
-n_steering: 15
-max_steps: 750

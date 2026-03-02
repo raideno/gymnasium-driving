@@ -4,8 +4,7 @@ wrappers: ???
 
 defaults:
   - controller: ???
-  - environment@train: ???
-  - environment@eval: ???
+  - environment: ???
   - reward: ???
   - defaults
   - _self_

@@ -1,13 +1,21 @@
 import os
 import shutil
+
 import hydra
-import omegaconf
 import hydra.core
 import hydra.core.hydra_config
-
 import numpy as np
+import omegaconf
 
 import src.helpers as helpers
+
+
+def _make_eval_env(env_config, reward_config, wrappers):
+    env = hydra.utils.instantiate(env_config)
+    env = hydra.utils.instantiate(reward_config, environment=env)
+    for wrapper in wrappers:
+        env = hydra.utils.instantiate(wrapper, environment=env)
+    return env
 
 
 @hydra.main(version_base=None, config_path="configurations", config_name="evaluate")
@@ -25,7 +33,7 @@ def evaluate(configuration: omegaconf.DictConfig):
 
     best_model_path = os.path.join(output_directory, "best_model.zip")
 
-    controller, train_environment, eval_environment = helpers.instantiate_configuration(
+    controller, train_environment, _ = helpers.instantiate_configuration(
         configuration=target_configuration,
         output_directory=output_directory,
         load_best_model=os.path.exists(best_model_path),
@@ -37,12 +45,9 @@ def evaluate(configuration: omegaconf.DictConfig):
     if has_custom_controller:
         controller = hydra.utils.instantiate(
             configuration.controller,
-            environment=eval_environment,
+            environment=train_environment,
         )
 
-        # Create a new evaluation directory next to the original output directory,
-        # copy the output directory structure and files (excluding logs/) into it,
-        # then store evaluation results there.
         hydra_output = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
         evaluation_directory = os.path.join(hydra_output, "evaluation")
         os.makedirs(evaluation_directory, exist_ok=True)
@@ -69,46 +74,60 @@ def evaluate(configuration: omegaconf.DictConfig):
     n_eval_episodes = configuration.n_eval_episodes
     deterministic = configuration.deterministic
 
-    print(f"[evaluate](#episodes={n_eval_episodes}): starting evaluation...")
+    wrappers = target_configuration.get("wrappers", [])
 
-    episode_rewards = []
-    episode_successes = []
+    env_configs = [
+        ("cristal", target_configuration.cristal),
+        ("straight", target_configuration.straight),
+    ]
 
-    for episode in range(n_eval_episodes):
-        observation, _ = eval_environment.reset()
-        done = False
-        truncated = False
+    all_episode_rewards = []
+    all_episode_successes = []
 
-        total_reward = 0.0
-        success = False
+    for env_name, env_cfg in env_configs:
+        print(f"\n[evaluate](#episodes={n_eval_episodes}): evaluating on {env_name}...")
 
-        while not (done or truncated):
-            action, _ = controller.predict(
-                observation,
-                deterministic=deterministic,
-            )
-
-            observation, reward, done, truncated, info = eval_environment.step(
-                action
-            )
-
-            total_reward += reward
-
-            if isinstance(info, dict) and "is_success" in info:
-                success = success or bool(info["is_success"])
-
-        episode_rewards.append(total_reward)
-        episode_successes.append(success)
-
-        print(
-            f"[ep-{(episode + 1):>2}]:"
-            f" reward={total_reward:>8.3f};"
-            f" success={success}"
+        eval_environment = _make_eval_env(
+            env_cfg, target_configuration.reward, wrappers
         )
 
-    mean_reward = np.mean(episode_rewards)
-    std_reward = np.std(episode_rewards)
-    success_rate = 100.0 * np.mean(episode_successes)
+        for episode in range(n_eval_episodes):
+            observation, _ = eval_environment.reset()
+            done = False
+            truncated = False
+
+            total_reward = 0.0
+            success = False
+
+            while not (done or truncated):
+                action, _ = controller.predict(
+                    observation,
+                    deterministic=deterministic,
+                )
+
+                observation, reward, done, truncated, info = eval_environment.step(
+                    action
+                )
+
+                total_reward += reward
+
+                if isinstance(info, dict) and "is_success" in info:
+                    success = success or bool(info["is_success"])
+
+            all_episode_rewards.append(total_reward)
+            all_episode_successes.append(success)
+
+            print(
+                f"  [{env_name}][ep-{(episode + 1):>2}]:"
+                f" reward={total_reward:>8.3f};"
+                f" success={success}"
+            )
+
+        eval_environment.close()
+
+    mean_reward = np.mean(all_episode_rewards)
+    std_reward = np.std(all_episode_rewards)
+    success_rate = 100.0 * np.mean(all_episode_successes)
 
     print("\n[evaluate] Results:")
     print(f"[evaluate] Mean reward:   {mean_reward:.3f} ± {std_reward:.3f}")
@@ -120,18 +139,14 @@ def evaluate(configuration: omegaconf.DictConfig):
         "success_rate": float(success_rate),
         "n_eval_episodes": n_eval_episodes,
         "deterministic": deterministic,
-        "episode_rewards": [float(r) for r in episode_rewards],
-        "episode_successes": [bool(s) for s in episode_successes],
+        "episode_rewards": [float(r) for r in all_episode_rewards],
+        "episode_successes": [bool(s) for s in all_episode_successes],
     }
 
     _save_evaluation_results(results, evaluation_directory)
 
 
 def _copy_directory_excluding(src: str, dst: str, exclude_dirs: set):
-    """
-    Recursively copy `src` into `dst`, skipping any directory whose
-    name appears in `exclude_dirs`.
-    """
     os.makedirs(dst, exist_ok=True)
     for item in os.listdir(src):
         if item in exclude_dirs:
@@ -145,10 +160,6 @@ def _copy_directory_excluding(src: str, dst: str, exclude_dirs: set):
 
 
 def _save_evaluation_results(results: dict, output_directory: str):
-    """
-    Persist evaluation results as both a plain-text summary and a numpy
-    archive.
-    """
     summary_path = os.path.join(output_directory, "evaluation_summary.txt")
     with open(summary_path, "w") as f:
         f.write(f"mean_reward:    {results['mean_reward']:.3f}\n")
