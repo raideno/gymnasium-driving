@@ -1,6 +1,5 @@
-import typing
+import kbm
 
-from kbm import KinematicBicycleModel
 
 class BicycleModel:
     def __init__(
@@ -18,13 +17,13 @@ class BicycleModel:
         self.wheelbase = wheelbase
         self.max_steer = max_steer
         self.delta_time = delta_time
-        
-        self._model = KinematicBicycleModel(
+
+        self._model = kbm.KinematicBicycleModel(
             wheelbase=wheelbase,
             max_steer=max_steer,
             delta_time=delta_time,
         )
-    
+
     def compute_state(
         self,
         x: float,
@@ -33,7 +32,7 @@ class BicycleModel:
         steer: float,
         velocity: float,
         acceleration: float,
-    ) -> typing.Dict[str, float]:
+    ):
         """
         Returns:
             Dictionary with keys: 'x', 'y', 'yaw', 'velocity'

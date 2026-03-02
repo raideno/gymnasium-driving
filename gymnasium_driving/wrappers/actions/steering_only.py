@@ -1,6 +1,8 @@
 import gymnasium
-
 import numpy as np
+
+import gymnasium_driving
+
 
 class SteeringOnlyActionWrapper(gymnasium.ActionWrapper):
     def __init__(
@@ -9,12 +11,14 @@ class SteeringOnlyActionWrapper(gymnasium.ActionWrapper):
         target_velocity: float,
     ):
         super().__init__(environment)
-        
+
         self.env = environment
 
-        max_velocity = float(self.env.unwrapped.MAX_VELOCITY)
+        max_velocity = float(gymnasium_driving.CarEnvironment.MAX_VELOCITY)
         if target_velocity < 0.0:
-            raise ValueError("target_velocity must be non-negative because reverse is disabled")
+            raise ValueError(
+                "target_velocity must be non-negative because reverse is disabled"
+            )
         if target_velocity > max_velocity:
             raise ValueError(
                 f"target_velocity ({target_velocity}) cannot exceed env MAX_VELOCITY ({max_velocity})"
@@ -34,13 +38,13 @@ class SteeringOnlyActionWrapper(gymnasium.ActionWrapper):
             steering_norm,
             -1.0,
             1.0,
-        ) * float(self.env.unwrapped.MAX_STEERING)
+        ) * float(gymnasium_driving.CarEnvironment.MAX_STEERING)
 
         current_velocity = self.env.unwrapped.state["velocity"]
 
         velocity_error = self.target_velocity - current_velocity
 
-        if velocity_error > 0.1: # some tolerance
+        if velocity_error > 0.1:  # some tolerance
             throttle_gain = 0.5
             throttle = np.clip(throttle_gain * velocity_error, 0.0, 1.0)
         else:
@@ -63,9 +67,11 @@ class DiscreteSteeringOnlyActionWrapper(gymnasium.ActionWrapper):
 
         self.env = environment
 
-        max_velocity = float(self.env.unwrapped.MAX_VELOCITY)
+        max_velocity = float(gymnasium_driving.CarEnvironment.MAX_VELOCITY)
         if target_velocity < 0.0:
-            raise ValueError("target_velocity must be non-negative because reverse is disabled")
+            raise ValueError(
+                "target_velocity must be non-negative because reverse is disabled"
+            )
         if target_velocity > max_velocity:
             raise ValueError(
                 f"target_velocity ({target_velocity}) cannot exceed env MAX_VELOCITY ({max_velocity})"
@@ -76,7 +82,7 @@ class DiscreteSteeringOnlyActionWrapper(gymnasium.ActionWrapper):
         self.target_velocity = float(target_velocity)
         self.n_steering = int(n_steering)
 
-        max_steer = float(self.env.unwrapped.MAX_STEERING)
+        max_steer = float(gymnasium_driving.CarEnvironment.MAX_STEERING)
         self.steering_levels = np.linspace(-max_steer, max_steer, self.n_steering)
         self.action_space = gymnasium.spaces.Discrete(self.n_steering)
 

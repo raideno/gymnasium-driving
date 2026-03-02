@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def curvature_windowed(path: np.ndarray, idx: int, window: int = 3) -> float:
     if len(path) < 3 or idx < 1 or idx >= len(path) - 1:
         return 0.0
@@ -14,8 +15,7 @@ def curvature_windowed(path: np.ndarray, idx: int, window: int = 3) -> float:
     p3 = path[min(end - 1, len(path) - 1)]
 
     area = 0.5 * abs(
-        (p2[0] - p1[0]) * (p3[1] - p1[1])
-        - (p3[0] - p1[0]) * (p2[1] - p1[1])
+        (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p3[0] - p1[0]) * (p2[1] - p1[1])
     )
 
     d1 = np.linalg.norm(p2 - p1)
@@ -28,9 +28,13 @@ def curvature_windowed(path: np.ndarray, idx: int, window: int = 3) -> float:
 
     return float(4.0 * area / denom)
 
+
 def wrap_to_pi(angle: float) -> float:
-    """Wrap angle to [-pi, pi]."""
+    """
+    Wrap angle to [-pi, pi].
+    """
     return float(np.arctan2(np.sin(angle), np.cos(angle)))
+
 
 def closest_polyline_index(polyline_xy: np.ndarray, point_xy: np.ndarray) -> int:
     """
@@ -38,6 +42,7 @@ def closest_polyline_index(polyline_xy: np.ndarray, point_xy: np.ndarray) -> int
     point_xy: (2,)
     """
     return int(np.argmin(np.linalg.norm(polyline_xy - point_xy, axis=1)))
+
 
 def polyline_tangent(polyline_xy: np.ndarray, idx: int) -> np.ndarray:
     """
@@ -60,6 +65,7 @@ def polyline_tangent(polyline_xy: np.ndarray, idx: int) -> np.ndarray:
     if norm < 1e-8:
         return np.array([1.0, 0.0], dtype=np.float32)
     return (t / norm).astype(np.float32)
+
 
 def signed_cte_to_polyline(
     polyline_xy: np.ndarray,
@@ -85,12 +91,15 @@ def signed_cte_to_polyline(
     cte = float(t_hat[0] * v[1] - t_hat[1] * v[0])
     return cte, idx
 
+
 def heading_error_to_polyline(
     polyline_xy: np.ndarray,
     ego_yaw: float,
     idx: int,
 ) -> float:
-    """Heading error (ego - path_heading) wrapped to [-pi, pi]."""
+    """
+    Heading error (ego - path_heading) wrapped to [-pi, pi].
+    """
     t_hat = polyline_tangent(polyline_xy, idx)
     path_heading = float(np.arctan2(t_hat[1], t_hat[0]))
     return wrap_to_pi(ego_yaw - path_heading)

@@ -1,76 +1,84 @@
-from PIL import Image as PILImage
-from IPython.display import display, clear_output
+import functools
+import json
+import os
+import sys
+import typing
 
-# NOTE: render_mode must be set to rgb_array
+import hydra
+import hydra.core
+import hydra.core.hydra_config
+import IPython
+import IPython.display
+import omegaconf
+import PIL
+import PIL.Image
 
+
+# NOTE: render_mode must be set to rgb_array in the environment
 def preview(
     environment,
     clear: bool = True,
 ):
     image = environment.render()
     if clear:
-        clear_output(wait=True)
-    
-    pil_img = PILImage.fromarray(image)
-    
-    display(pil_img)
+        IPython.display.clear_output(wait=True)
 
-import os
-import json
-import hydra
-import omegaconf
-import sys
+    pil_img = PIL.Image.fromarray(image)
 
-def save_configuration(
-    configuration: omegaconf.DictConfig,
-    script: str | None = None
-):
+    IPython.display.display(pil_img)
+
+
+def save_configuration(configuration: omegaconf.DictConfig, script: str | None = None):
     output_directory = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-    
-    configuration = omegaconf.OmegaConf.to_container(configuration, resolve=True)
-    
+
+    dict_configuration = omegaconf.OmegaConf.to_container(configuration, resolve=True)
+
     with open(os.path.join(output_directory, "configuration.json"), "w") as file:
-        json.dump(configuration, file, indent=4)
-    
+        json.dump(dict_configuration, file, indent=4)
+
     if script is not None:
         with open(os.path.join(output_directory, "script"), "w") as file:
             file.write(script)
-    
+
     with open(os.path.join(output_directory, "command"), "w") as file:
         file.write(" ".join(sys.argv))
+
 
 def load_configuration(
     output_directory: str,
     expected_script: str | None = None,
-) -> omegaconf.DictConfig:
+):
     with open(os.path.join(output_directory, "configuration.json"), "r") as file:
         configuration = json.load(file)
-    
+
     if expected_script is not None:
         with open(os.path.join(output_directory, "script"), "r") as file:
             script = file.read()
-        
+
         if script != expected_script:
-            raise ValueError(f"Expected script does not match the one in the output directory. Expected: {expected_script}, Found: {script}")
-    
+            raise ValueError(
+                f"Expected script does not match the one in the output directory. Expected: {expected_script}, Found: {script}"
+            )
+
     configuration = omegaconf.OmegaConf.create(configuration)
-    
+
     return configuration
+
 
 def instantiate_configuration(
     configuration: omegaconf.DictConfig,
     output_directory: str | None = None,
     load_best_model: bool = True,
-    base_dir: str = "../configurations"
+    base_dir: str = "../configurations",
 ):
     """
     Instantiate environment, reward wrapper, and controller from configuration.
-    
+
     Args:
         configuration: Hydra configuration containing environment, reward, and controller specs
         output_directory: Path to directory containing saved models (optional)
         load_best_model: Whether to load the best model if it exists
-    
+
     Returns:
         Tuple of (controller, environment)
     """
@@ -79,81 +87,75 @@ def instantiate_configuration(
         configuration.reward,
         environment=train_environment,
     )
-    
+
     eval_environment = hydra.utils.instantiate(configuration.train)
     eval_environment = hydra.utils.instantiate(
         configuration.reward,
         environment=eval_environment,
     )
-    
+
     if "wrappers" in configuration.keys():
         apply_prefill(
             configuration=configuration,
             key="wrappers",
             search_path="observations",
             raise_if_missing=True,
-            base_dir=base_dir
+            base_dir=base_dir,
         )
-        
+
         for wrapper in configuration.wrappers:
             train_environment = hydra.utils.instantiate(
-                wrapper,
-                environment=train_environment
+                wrapper, environment=train_environment
             )
-        
+
         for wrapper in configuration.wrappers:
             eval_environment = hydra.utils.instantiate(
-                wrapper,
-                environment=eval_environment
+                wrapper, environment=eval_environment
             )
-    
+
     controller = hydra.utils.instantiate(
         configuration.controller,
         environment=train_environment,
     )
-    
+
     if load_best_model and output_directory is not None:
         best_model_path = os.path.join(output_directory, "best_model.zip")
         if os.path.exists(best_model_path):
-            controller.model = controller.model.load(best_model_path, env=train_environment)
-    
+            controller.model = controller.model.load(
+                best_model_path, env=train_environment
+            )
+
     return controller, train_environment, eval_environment
+
 
 def get_last_run_directory(
     base_directory: str,
     script: str | None = None,
 ):
     day_directories = sorted(os.listdir(base_directory))
-    
+
     if not day_directories:
         raise ValueError(f"No runs found in base directory: {base_directory}")
-    
+
     day_directory = os.path.join(base_directory, day_directories[-1])
     run_directories = sorted(os.listdir(day_directory))
-    
+
     if not run_directories:
         raise ValueError(f"No runs found in day directory: {day_directory}")
-    
+
     for run_dir in reversed(run_directories):
         full_path = os.path.join(day_directory, run_dir)
-        
+
         if script is None:
             return full_path
-        
+
         script_path = os.path.join(full_path, "script")
         if os.path.exists(script_path):
             with open(script_path, "r") as file:
                 if file.read() == script:
                     return full_path
-    
+
     raise ValueError(f"No matching run found for script: {script}")
-
-import os
-import typing
-import functools
-
-import hydra
-import omegaconf
 
 
 def get_config_path() -> str:
@@ -188,7 +190,9 @@ def _get_container_and_leaf(
 
     container: typing.Any = configuration
     for part in parts[:-1]:
-        if not (isinstance(container, (dict, omegaconf.DictConfig)) and part in container):
+        if not (
+            isinstance(container, (dict, omegaconf.DictConfig)) and part in container
+        ):
             raise KeyError(f"Key path '{path}' not found (missing '{part}').")
         container = container[part]
 
@@ -201,7 +205,7 @@ def _load_prefill(
     key_path: str,
     base_dir: str,
     search_path: str | None,
-) -> list[omegaconf.DictConfig]:
+):
     container, leaf = _get_container_and_leaf(configuration, key_path)
 
     if not (isinstance(container, (dict, omegaconf.DictConfig)) and leaf in container):
@@ -216,11 +220,15 @@ def _load_prefill(
     relative_dir = _dot_to_fs_path(key_path) if search_path is None else search_path
     target_dir = os.path.join(base_dir, relative_dir)
 
-    prefilled: list[omegaconf.DictConfig] = []
+    prefilled: list[omegaconf.DictConfig | omegaconf.ListConfig] = []
     for item in value:
         # NOTE: item is already a dict/DictConfig, use it directly (already resolved by Hydra)
         if isinstance(item, (dict, omegaconf.DictConfig)):
-            prefilled.append(item if isinstance(item, omegaconf.DictConfig) else omegaconf.OmegaConf.create(item))
+            prefilled.append(
+                item
+                if isinstance(item, omegaconf.DictConfig)
+                else omegaconf.OmegaConf.create(item)
+            )
         # NOTE: item is a string, load the corresponding YAML file
         elif isinstance(item, str):
             prefilled.append(

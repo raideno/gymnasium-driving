@@ -1,10 +1,11 @@
 import typing
-import pygame
 
 import numpy as np
+import pygame
 
 import gymnasium_driving.components.constants as constants
 from gymnasium_driving.helpers import polyline_tangent
+
 
 class Renderer:
     def __init__(
@@ -16,10 +17,10 @@ class Renderer:
         self.screen_size = screen_size
         self.render_mode = render_mode
         self.render_fps = render_fps
-        
+
         self.screen: pygame.Surface | None = None
         self.clock: pygame.time.Clock | None = None
-    
+
     def initialize(self) -> None:
         if self.screen is None:
             pygame.init()
@@ -30,48 +31,52 @@ class Renderer:
             else:
                 self.screen = pygame.Surface(self.screen_size)
             self.clock = pygame.time.Clock()
-    
+
     def render_frame(self, env) -> np.ndarray | None:
         """
         Returns:
             RGB array if render_mode is "rgb_array", None otherwise
         """
         self.initialize()
-        
+
         self.screen.fill(constants.light_gray)
-        
+
         self._draw_grid(env)
-        
+
         if env.road_network is not None:
             self._draw_roads(env)
-        
+
         if env.path is not None and len(env.path) > 1:
             self._draw_global_path(env)
-        
+
         self._draw_obstacles(env)
-        
+
         self._draw_goal(env)
-        
+
         if env.state is not None:
             self._draw_car(env)
             self._draw_path_tracking_debug(env)
-        
-        self._draw_spawn(env)
-        
-        self._draw_scale_indicator(env)
-        
-        self._draw_info_text(env)
-        
-        env.overlay_manager.render(self.screen, env._world_to_screen, env._meters_to_pixels)
 
-        env.performance_tracker.render(self.screen, self.screen_size, env.simulation_time)
-        
+        self._draw_spawn(env)
+
+        self._draw_scale_indicator(env)
+
+        self._draw_info_text(env)
+
+        env.overlay_manager.render(
+            self.screen, env._world_to_screen, env._meters_to_pixels
+        )
+
+        env.performance_tracker.render(
+            self.screen, self.screen_size, env.simulation_time
+        )
+
         if self.render_mode == "human":
             pygame.event.pump()
             pygame.display.flip()
             self.clock.tick(self.render_fps)
             return None
-        
+
         return np.transpose(
             np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
         )
@@ -105,16 +110,16 @@ class Renderer:
 
         pygame.draw.line(self.screen, (30, 120, 255), ego_screen, ego_heading_tip, 3)
         pygame.draw.line(self.screen, (60, 180, 75), ego_screen, path_heading_tip, 3)
-    
+
     def _draw_grid(self, env) -> None:
         # TODO: externalize
         grid_spacing = 10.0  # meters
         grid_color = (200, 200, 200)
-        
+
         min_x, min_y = env.world_origin
         max_x = min_x + env.world_size[0]
         max_y = min_y + env.world_size[1]
-        
+
         # vertical grid lines
         x = np.ceil(min_x / grid_spacing) * grid_spacing
         while x <= max_x:
@@ -122,7 +127,7 @@ class Renderer:
             end = env._world_to_screen((x, max_y))
             pygame.draw.line(self.screen, grid_color, start, end, 1)
             x += grid_spacing
-        
+
         # horizontal grid lines
         y = np.ceil(min_y / grid_spacing) * grid_spacing
         while y <= max_y:
@@ -130,45 +135,49 @@ class Renderer:
             end = env._world_to_screen((max_x, y))
             pygame.draw.line(self.screen, grid_color, start, end, 1)
             y += grid_spacing
-    
+
     def _draw_roads(self, env) -> None:
         # First pass: draw all road surfaces (polygons)
         for road in env.road_network.roads:
             half_width = road.half_width
-            
+
             for segment in road.segments:
                 num_points = max(20, int(segment.get_length() * 2))
                 left, right = segment.get_boundary_points(half_width, num_points)
-                
+
                 left_screen = [env._world_to_screen(p) for p in left]
                 right_screen = [env._world_to_screen(p) for p in right]
-                
+
                 polygon_points = left_screen + right_screen[::-1]
                 if len(polygon_points) >= 3:
                     pygame.draw.polygon(self.screen, constants.gray, polygon_points)
-        
+
         # Second pass: draw boundary lines
         for road in env.road_network.roads:
             half_width = road.half_width
-            
+
             for segment in road.segments:
                 num_points = max(20, int(segment.get_length() * 2))
                 left, right = segment.get_boundary_points(half_width, num_points)
-                
+
                 left_screen = [env._world_to_screen(p) for p in left]
                 right_screen = [env._world_to_screen(p) for p in right]
-                
+
                 if len(left_screen) >= 2:
-                    pygame.draw.lines(self.screen, constants.dark_gray, False, left_screen, 3)
-                    pygame.draw.lines(self.screen, constants.dark_gray, False, right_screen, 3)
-    
+                    pygame.draw.lines(
+                        self.screen, constants.dark_gray, False, left_screen, 3
+                    )
+                    pygame.draw.lines(
+                        self.screen, constants.dark_gray, False, right_screen, 3
+                    )
+
     def _draw_global_path(self, env) -> None:
         global_path = env.path
         path_screen = [env._world_to_screen(p) for p in global_path]
-        
+
         is_loop = True  # Draw path line (closed loop if it's a circular path), assume loop by default
         pygame.draw.lines(self.screen, (150, 100, 200), is_loop, path_screen, 2)
-        
+
         for i in range(0, len(path_screen), max(1, len(path_screen) // 128)):
             point = path_screen[i]
             if i == 0:
@@ -178,16 +187,19 @@ class Renderer:
                 color = (150, 100, 200)
                 radius = 3
             pygame.draw.circle(self.screen, color, point, radius)
-    
+
     def _draw_obstacles(self, env) -> None:
         for obs in env.obstacles:
             center_screen = env._world_to_screen(obs.center)
             # Import here to avoid circular dependency
             from ..components.obstacles import Circle, Rectangle
+
             if isinstance(obs, Circle):
                 radius_px = env._meters_to_pixels(obs.radius)
                 pygame.draw.circle(self.screen, constants.red, center_screen, radius_px)
-                pygame.draw.circle(self.screen, constants.dark_gray, center_screen, radius_px, 2)
+                pygame.draw.circle(
+                    self.screen, constants.dark_gray, center_screen, radius_px, 2
+                )
             elif isinstance(obs, Rectangle):
                 width_px = env._meters_to_pixels(obs.width)
                 height_px = env._meters_to_pixels(obs.height)
@@ -199,31 +211,38 @@ class Renderer:
                 )
                 pygame.draw.rect(self.screen, constants.red, rect)
                 pygame.draw.rect(self.screen, constants.dark_gray, rect, 2)
-    
+
     def _draw_goal(self, env) -> None:
         goal_screen = env._world_to_screen(env.goal_pos)
         goal_radius_px = env._meters_to_pixels(env.goal_radius)
         pygame.draw.circle(self.screen, constants.green, goal_screen, goal_radius_px)
-        pygame.draw.circle(self.screen, constants.dark_gray, goal_screen, goal_radius_px, 2)
-    
+        pygame.draw.circle(
+            self.screen, constants.dark_gray, goal_screen, goal_radius_px, 2
+        )
+
     def _draw_car(self, env) -> None:
         """Draw car as a proper rectangle with heading."""
-        x, y, theta, v = env.state["x"], env.state["y"], env.state["yaw"], env.state["velocity"]
-        
+        x, y, theta, v = (
+            env.state["x"],
+            env.state["y"],
+            env.state["yaw"],
+            env.state["velocity"],
+        )
+
         # Use instance car dimensions
         half_length = env.CAR_LENGTH / 2
         half_width = env.CAR_WIDTH / 2
-        
+
         # Get car corners using the helper method
         corners_world = env._get_car_corners()
-        
+
         # Convert to screen coordinates
         corners_screen = [env._world_to_screen(corner) for corner in corners_world]
-        
+
         # Draw car body
         pygame.draw.polygon(self.screen, constants.blue, corners_screen)
         pygame.draw.polygon(self.screen, constants.dark_gray, corners_screen, 2)
-        
+
         # Draw front indicator (small triangle at front)
         pos = np.array([x, y])
         c, s = np.cos(theta), np.sin(theta)
@@ -237,20 +256,20 @@ class Renderer:
             env._world_to_screen(front_right),
         ]
         pygame.draw.polygon(self.screen, (100, 100, 220), front_points)
-    
+
     def _draw_spawn(self, env) -> None:
         spawn_screen = env._world_to_screen(env.spawn_pos)
         pygame.draw.circle(self.screen, constants.black, spawn_screen, 5)
         pygame.draw.circle(self.screen, constants.white, spawn_screen, 3)
-    
+
     def _draw_scale_indicator(self, env) -> None:
         # Draw a 10-meter scale bar in the bottom-right corner
         scale_length_m = 10.0
         scale_length_px = env._meters_to_pixels(scale_length_m)
-        
+
         bar_x = self.screen_size[0] - scale_length_px - 20
         bar_y = self.screen_size[1] - 30
-        
+
         # Draw the bar
         pygame.draw.line(
             self.screen,
@@ -270,21 +289,21 @@ class Renderer:
             (bar_x + scale_length_px, bar_y + 5),
             2,
         )
-        
+
         # Label
         font = pygame.font.Font(None, 20)
         text = font.render(f"{scale_length_m:.0f}m", True, (0, 0, 0))
         text_rect = text.get_rect(center=(bar_x + scale_length_px // 2, bar_y - 12))
         self.screen.blit(text, text_rect)
-    
+
     def _draw_info_text(self, env) -> None:
         state = env.state
         if state is None:
             return
-        
+
         font = pygame.font.Font(None, 24)
         x, y, theta, v = state["x"], state["y"], state["yaw"], state["velocity"]
-        
+
         lines = [
             f"Position: ({x:.1f}m, {y:.1f}m)",
             f"Heading: {np.degrees(theta):.1f} deg",
@@ -293,16 +312,18 @@ class Renderer:
             f"Heading error: {np.degrees(state.get('heading_error', 0.0)):.1f} deg",
             f"Closest path idx: {int(state.get('closest_path_idx', 0))}",
         ]
-        
+
         if env.road_network is not None:
-            ego_pos = np.array([env.unwrapped.state["x"], env.unwrapped.state["y"]], dtype=np.float32)
+            ego_pos = np.array(
+                [env.unwrapped.state["x"], env.unwrapped.state["y"]], dtype=np.float32
+            )
             on_road = not env.road_network.is_off_road(ego_pos)
             lines.append(f"On road: {'Yes' if on_road else 'No'}")
-        
+
         for i, line in enumerate(lines):
             text = font.render(line, True, (0, 0, 0))
             self.screen.blit(text, (10, 10 + i * 22))
-    
+
     def close(self) -> None:
         if self.screen is not None:
             pygame.quit()

@@ -5,7 +5,11 @@ To install the environment:
 pip install git+https://github.com/raideno/gymnasium-driving-environment.git
 ```
 
-## Development
+## Environment Development
+
+You can find all the code related to the environment inside [`gymnasium_driving/`](./gymnasium_driving/) directory.
+
+## RL Training
 
 First you need to have [Just](https://github.com/casey/just) installed in your computer.
 

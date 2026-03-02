@@ -1,38 +1,42 @@
 import typing
 
-import gymnasium as gym
+import gymnasium
+import numpy
 
 import gymnasium_driving
+import gymnasium_driving.components
+import gymnasium_driving.components.roads
+import gymnasium_driving.environment
 import gymnasium_driving.wrappers
+
 
 def make_environment(
     discrete: bool,
-    render_mode: typing.Literal["rgb_array", "human"] | None = None,
+    render_mode: typing.Literal["rgb_array"] | None = None,
     target_velocity: float = 2.5,
     n_steering: int = 15,
     max_steps: int = 600,
-    **kwargs
+    **kwargs,
 ):
     """
     Randomized road environment with domain randomization of paths and obstacles.
     """
     env = gymnasium_driving.CarEnvironment(
         model="bicycle",
-        road_network=gymnasium_driving.components.roads.RoadNetwork(
+        road_network_factory=lambda e: gymnasium_driving.components.roads.RoadNetwork(
             roads=[
                 gymnasium_driving.components.roads.create_rectangular_track(
-                    center=(50, 50),
-                    length=80,
-                    height=40,
-                    turn_radius=8.0,
-                    width=8.0,
+                    center=(numpy.random.randint(40, 60), numpy.random.randint(40, 60)),
+                    length=numpy.random.randint(80, 120),
+                    height=numpy.random.randint(80, 120),
+                    turn_radius=numpy.random.randint(6, 10),
+                    width=numpy.random.randint(6, 10),
                 )
             ],
         ),
         render_mode=render_mode,
-        proportion=(0.90, 0.00),
-        noise=(0.0, 0.0),
-        obstacles=[],
+        positions_factory=gymnasium_driving.environment.make_centerline_positions_factory(),
+        obstacles_factory=lambda e: [],
     )
 
     if discrete:
@@ -47,6 +51,6 @@ def make_environment(
             target_velocity=target_velocity,
         )
 
-    env = gym.wrappers.TimeLimit(env, max_episode_steps=max_steps)
+    env = gymnasium.wrappers.TimeLimit(env, max_episode_steps=max_steps)
 
     return env
