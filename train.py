@@ -29,6 +29,36 @@ def _make_env(env_config, reward_config, wrappers, monitor_path):
     return env
 
 
+class _TrainMetricsCallback(stable_baselines3.common.callbacks.BaseCallback):
+    def __init__(self):
+        super().__init__()
+        self._ctes = []
+        self._heading_errors = []
+
+    def _on_step(self) -> bool:
+        for info in self.locals["infos"]:
+            self._ctes.append(abs(info["cte"]))
+            self._heading_errors.append(abs(info["heading_error"]))
+        return True
+
+    def _on_rollout_end(self) -> None:
+        if not self.model.ep_info_buffer:
+            return
+        rewards = [ep["r"] for ep in self.model.ep_info_buffer]
+        lengths = [ep["l"] for ep in self.model.ep_info_buffer]
+        metrics = {
+            "train/mean_reward": sum(rewards) / len(rewards),
+            "train/mean_ep_length": sum(lengths) / len(lengths),
+            "train/mean_abs_cte": sum(self._ctes) / len(self._ctes),
+            "train/mean_abs_heading_error": sum(self._heading_errors)
+            / len(self._heading_errors),
+            "global_step": self.num_timesteps,
+        }
+        self._ctes = []
+        self._heading_errors = []
+        wandb.log(metrics)
+
+
 @hydra.main(version_base=None, config_path="configurations", config_name="train")
 @helpers.prefill(key="wrappers", search_path="observations")
 def train(configuration: omegaconf.DictConfig):
@@ -60,7 +90,7 @@ def train(configuration: omegaconf.DictConfig):
         train_environment,
         os.path.join(output_directory, "training_videos"),
         record_video_trigger=lambda step: step % 100_000 == 0,
-        video_length=200,
+        video_length=512,
     )
 
     eval_environment = stable_baselines3.common.vec_env.DummyVecEnv(
@@ -74,6 +104,26 @@ def train(configuration: omegaconf.DictConfig):
             for name, cfg in env_configs
         ]
     )
+    eval_environment = stable_baselines3.common.vec_env.VecVideoRecorder(
+        eval_environment,
+        os.path.join(output_directory, "training_videos"),
+        record_video_trigger=lambda step: step % 100_000 == 0,
+        video_length=512,
+    )
+
+    authentication = wandb.login(
+        key=os.environ.get("WANDB_API_KEY"), relogin=True, verify=True
+    )
+
+    print(f"[wandb]: authentication successful: {authentication}")
+
+    run = wandb.init(
+        project="research-project",
+        config=omegaconf.OmegaConf.to_container(configuration, resolve=True),
+        sync_tensorboard=True,
+        save_code=True,
+        dir=output_directory,
+    )
 
     logger = stable_baselines3.common.logger.configure(
         os.path.join(output_directory, "logs"), ["stdout", "csv", "json", "tensorboard"]
@@ -85,38 +135,21 @@ def train(configuration: omegaconf.DictConfig):
     # NOTE: might not work with deterministic controllers as they don't have a .model
     controller.model.set_logger(logger)
 
-    authentication = wandb.login(
-        key=os.environ.get("WANDB_API_KEY"), relogin=True, verify=True
-    )
-
-    print(f"[wandb]: authentication successful: {authentication}")
-
-    run = wandb.init(
-        project="research-project",
-        config=omegaconf.OmegaConf.to_container(configuration, resolve=True),
-        # sync_tensorboard=True,
-        save_code=True,
-        dir=output_directory,
-    )
-
     controller = controller.learn(
         total_timesteps=configuration.total_timesteps,
         progress_bar=True,
         callback=stable_baselines3.common.callbacks.CallbackList(
             [
+                _TrainMetricsCallback(),
                 stable_baselines3.common.callbacks.EvalCallback(
                     eval_env=eval_environment,
-                    n_eval_episodes=5,
-                    eval_freq=10_000,
                     log_path=os.path.join(output_directory),
                     best_model_save_path=os.path.join(output_directory),
                     deterministic=True,
                 ),
                 wandb.integration.sb3.WandbCallback(
                     verbose=2,
-                    gradient_save_freq=100,
                     model_save_path=os.path.join(output_directory, "models"),
-                    model_save_freq=50_000,
                 ),
             ]
         ),

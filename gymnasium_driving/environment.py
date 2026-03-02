@@ -432,7 +432,16 @@ class CarEnvironment(gymnasium.Env):
                 if self.road_network.enforce_road:
                     terminated = True
 
-        return {}, reward, terminated, truncated, {}
+        return (
+            {},
+            reward,
+            terminated,
+            truncated,
+            {
+                "cte": self.state["cte"],
+                "heading_error": self.state["heading_error"],
+            },
+        )
 
     def _get_car_corners(self) -> np.ndarray:
         return self._get_car_corners_for_pose(
