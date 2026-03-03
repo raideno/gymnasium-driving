@@ -1,7 +1,5 @@
-from .path_progress import PathProgressReward
-from .smooth_path_progress import SmoothPathProgressReward
+from .reward import Reward
 
 __all__ = [
-    "PathProgressReward",
-    "SmoothPathProgressReward",
+    "Reward",
 ]

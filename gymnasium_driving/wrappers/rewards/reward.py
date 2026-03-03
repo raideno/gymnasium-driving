@@ -34,7 +34,7 @@ class SmoothPathProgressRewardConfig:
     steering_jerk_weight: float = 0.3
 
 
-class SmoothPathProgressReward(gymnasium.Wrapper):
+class Reward(gymnasium.Wrapper):
     """
     Extends PathProgressReward with two additional smoothness penalties:
 

@@ -13,8 +13,6 @@ import gymnasium_driving.wrappers
 def make_environment(
     discrete: bool,
     render_mode: typing.Literal["rgb_array"] | None = None,
-    target_velocity: float = 2.5,
-    n_steering: int = 15,
     max_steps: int = 600,
     **kwargs,
 ):
@@ -40,15 +38,8 @@ def make_environment(
     )
 
     if discrete:
-        env = gymnasium_driving.wrappers.actions.DiscreteSteeringOnlyActionWrapper(
-            env,
-            target_velocity=target_velocity,
-            n_steering=n_steering,
-        )
-    else:
-        env = gymnasium_driving.wrappers.actions.SteeringOnlyActionWrapper(
-            env,
-            target_velocity=target_velocity,
+        env = gymnasium_driving.wrappers.actions.DiscretizeActionWrapper(
+            env, n_steering=5, n_throttle=3, n_brake=2
         )
 
     env = gymnasium.wrappers.TimeLimit(env, max_episode_steps=max_steps)

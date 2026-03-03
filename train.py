@@ -93,24 +93,6 @@ def train(configuration: omegaconf.DictConfig):
         video_length=512,
     )
 
-    eval_environment = stable_baselines3.common.vec_env.DummyVecEnv(
-        [
-            lambda name=name, cfg=cfg: _make_env(
-                cfg,
-                configuration.reward,
-                configuration.wrappers,
-                os.path.join(output_directory, "logs", f"eval_monitor_{name}.csv"),
-            )
-            for name, cfg in env_configs
-        ]
-    )
-    eval_environment = stable_baselines3.common.vec_env.VecVideoRecorder(
-        eval_environment,
-        os.path.join(output_directory, "training_videos"),
-        record_video_trigger=lambda step: step % 100_000 == 0,
-        video_length=512,
-    )
-
     authentication = wandb.login(
         key=os.environ.get("WANDB_API_KEY"), relogin=True, verify=True
     )
@@ -142,7 +124,7 @@ def train(configuration: omegaconf.DictConfig):
             [
                 _TrainMetricsCallback(),
                 stable_baselines3.common.callbacks.EvalCallback(
-                    eval_env=eval_environment,
+                    eval_env=train_environment,
                     log_path=os.path.join(output_directory),
                     best_model_save_path=os.path.join(output_directory),
                     deterministic=True,

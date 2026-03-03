@@ -1,20 +1,14 @@
-from . import actions
-from . import rewards
-from . import observations
-
+from . import actions, observations, rewards
+from .actions import (
+    DiscretizeActionWrapper,
+)
 from .observations import (
     WithObstaclesInfo,
-    WithRoadInfo,
     WithPathInfo,
+    WithRoadInfo,
 )
-
 from .rewards import (
-    PathProgressReward,
-)
-
-from .actions import (
-    SteeringOnlyActionWrapper,
-    DiscreteSteeringOnlyActionWrapper,
+    Reward,
 )
 
 __all__ = [
@@ -22,16 +16,12 @@ __all__ = [
     "observations",
     "rewards",
     "actions",
-    
     # Observation wrappers
     "WithObstaclesInfo",
     "WithRoadInfo",
     "WithPathInfo",
-    
     # Reward wrappers
-    "PathProgressReward",
-    
+    "Reward",
     # Actions
-    "SteeringOnlyActionWrapper",
-    "DiscreteSteeringOnlyActionWrapper",
+    "DiscretizeActionWrapper",
 ]

@@ -1,7 +1,5 @@
-from .steering_only import SteeringOnlyActionWrapper
-from .steering_only import DiscreteSteeringOnlyActionWrapper
+from .discretize import DiscretizeActionWrapper
 
 __all__ = [
-    "SteeringOnlyActionWrapper",
-    "DiscreteSteeringOnlyActionWrapper",
+    "DiscretizeActionWrapper",
 ]

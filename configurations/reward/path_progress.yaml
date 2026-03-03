@@ -1,1 +1,0 @@
-_target_: gymnasium_driving.wrappers.rewards.path_progress.PathProgressReward
