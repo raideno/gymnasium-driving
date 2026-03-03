@@ -36,7 +36,9 @@ def make_environment(
             ],
         ),
         positions_factory=gymnasium_driving.factories.make_centerline_positions_factory(),
-        obstacles_factory=gymnasium_driving.factories.make_random_obstacles_factory(),
+        obstacles_factory=gymnasium_driving.factories.make_random_obstacles_factory(
+            num_obstacles=2, min_spacing_m=20.0
+        ),
         render_mode=render_mode,
     )
 

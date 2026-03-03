@@ -27,7 +27,7 @@ def test(configuration: omegaconf.DictConfig):
     # print(configuration.observations)
 
     environment = hydra.utils.instantiate(
-        configuration.environment, render_mode="rgb_array"
+        configuration.straight, render_mode="rgb_array"
     )
 
     for i in range(10):

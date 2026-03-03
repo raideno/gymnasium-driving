@@ -5,10 +5,6 @@ import gymnasium_driving.environment
 
 
 def make_empty_obstacles_factory() -> gymnasium_driving.environment.ObstaclesFactory:
-    """
-    Returns an obstacles factory that places no obstacles.
-    """
-
     def factory(
         env: "gymnasium_driving.environment.CarEnvironment",
     ) -> gymnasium_driving.environment.ObstacleList:
@@ -18,17 +14,8 @@ def make_empty_obstacles_factory() -> gymnasium_driving.environment.ObstaclesFac
 
 
 def make_random_obstacles_factory(
-    num_obstacles: int = 3,
-    min_radius: float = 0.6,
-    max_radius: float = 1.2,
-    exclude_start_k: int = 5,
-    exclude_end_k: int = 3,
-    min_lateral_offset: float = 0.3,
-    max_lateral_offset: float = 1.8,
-    min_spacing_m: float = 3.0,
-    spawn_clearance: float = 4.0,
-    navigability_check: bool = True,
-    max_attempts_per_obstacle: int = 8,
+    num_obstacles: int,
+    min_spacing_m: float,
 ) -> gymnasium_driving.environment.ObstaclesFactory:
     """
     Returns an obstacles factory that places circular obstacles along the
@@ -37,29 +24,23 @@ def make_random_obstacles_factory(
     Parameters
     ----------
     num_obstacles:
-        How many obstacles to attempt to place.
-    min_radius / max_radius:
-        Radius range (meters) for each circular obstacle.
-    exclude_start_k / exclude_end_k:
-        Number of path indices to skip at the start and end of the path.
-        Increase exclude_start_k to widen the spawn-area buffer.
-    min_lateral_offset / max_lateral_offset:
-        Lateral displacement range (meters) from the path centerline.
-        A non-zero min_lateral_offset biases obstacles off-center so the
-        path is easier to navigate.
+        How many obstacles to place.
     min_spacing_m:
         Minimum arc-length distance (meters) between any two obstacles.
-    spawn_clearance:
-        Additional hard exclusion radius (meters) around the spawn position.
-        Any candidate whose circle overlaps this zone is rejected.
-    navigability_check:
-        When True, a candidate is rejected if the obstacle center falls
-        directly on the path (i.e. the lateral offset after clamping is
-        smaller than min_lateral_offset + radius), preventing a full block.
-    max_attempts_per_obstacle:
-        Number of random lateral-side attempts per chosen path index before
-        giving up on that index.
+
+    Fixed internals
+    ---------------
+    radius          : 0.9 m
+    lateral_offset  : abs(Normal(1.0, 0.3)) m, side sampled randomly
+    exclude_start   : 8.0 m from spawn point
+    exclude_end     : 5.0 m from goal point
     """
+
+    _RADIUS = 1.5
+    _LATERAL_MEAN = 1.0
+    _LATERAL_STD = 0.3
+    _EXCLUDE_START_M = 10
+    _EXCLUDE_END_M = 10
 
     def _build_arc_lengths(path: np.ndarray) -> np.ndarray:
         deltas = np.linalg.norm(np.diff(path, axis=0), axis=1)
@@ -79,11 +60,12 @@ def make_random_obstacles_factory(
     def _sample_spaced_indices(
         rng: np.random.Generator,
         arc_lengths: np.ndarray,
-        lo: int,
-        hi: int,
+        lo_s: float,
+        hi_s: float,
         k: int,
     ) -> list:
-        candidates = np.arange(lo, hi)
+        valid_mask = (arc_lengths >= lo_s) & (arc_lengths <= hi_s)
+        candidates = np.where(valid_mask)[0]
         rng.shuffle(candidates)
         chosen = []
         for idx in candidates:
@@ -102,20 +84,18 @@ def make_random_obstacles_factory(
             return []
 
         path = np.asarray(path, dtype=np.float32)
-        n_pts = len(path)
         arc_lengths = _build_arc_lengths(path)
-        rng = env.np_random  # use the env's seeded RNG for reproducibility
+        total_length = float(arc_lengths[-1])
+        rng = env.np_random
 
-        lo = exclude_start_k
-        hi = n_pts - exclude_end_k
-        if hi <= lo:
+        lo_s = _EXCLUDE_START_M
+        hi_s = total_length - _EXCLUDE_END_M
+        if hi_s <= lo_s:
             return []
 
         chosen_indices = _sample_spaced_indices(
-            rng, arc_lengths, lo, hi, k=num_obstacles
+            rng, arc_lengths, lo_s, hi_s, k=num_obstacles
         )
-
-        spawn_pos = np.asarray(env.spawn_pos, dtype=np.float32)
 
         obstacles: gymnasium_driving.environment.ObstacleList = []
 
@@ -123,31 +103,16 @@ def make_random_obstacles_factory(
             p = path[path_idx]
             nrm = _unit_normal_at(path, path_idx)
 
-            placed = False
-            for _ in range(max_attempts_per_obstacle):
-                r = float(rng.uniform(min_radius, max_radius))
-                d = float(rng.uniform(min_lateral_offset, max_lateral_offset))
-                sign = float(rng.choice([-1.0, 1.0]))
-                center = (p + sign * d * nrm).astype(np.float32)
+            d = abs(float(rng.normal(_LATERAL_MEAN, _LATERAL_STD)))
+            sign = float(rng.choice([-1.0, 1.0]))
+            center = (p + sign * d * nrm).astype(np.float32)
 
-                # reject if too close to the spawn position
-                if float(np.linalg.norm(center - spawn_pos)) < spawn_clearance + r:
-                    continue
-
-                # reject if the circle blocks the path (center too close to
-                # the centerline to leave a navigable gap on either side)
-                if navigability_check and d < min_lateral_offset + r:
-                    continue
-
-                obstacles.append(
-                    gymnasium_driving.environment.Circle(
-                        center=(float(center[0]), float(center[1])), radius=r
-                    )
+            obstacles.append(
+                gymnasium_driving.environment.Circle(
+                    center=(float(center[0]), float(center[1])),
+                    radius=_RADIUS,
                 )
-                placed = True
-                break
-
-            # if no valid placement was found for this index, skip silently
+            )
 
         return obstacles
 

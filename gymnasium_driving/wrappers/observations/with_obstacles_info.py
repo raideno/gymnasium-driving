@@ -77,7 +77,6 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
         self.max_obstacles = max_obstacles
         self.ego_frame = True
 
-        # TODO: add rel_x > 0
         # TODO: add time to collision ttc
         self.obstacle_instance_dimension = 5
 
@@ -125,6 +124,10 @@ class WithObstaclesInfo(gymnasium.ObservationWrapper):
             rel_pos = (
                 rotation_matrix @ rel_pos_world if self.ego_frame else rel_pos_world
             )
+
+            # NOTE: skip obstacles behind the ego vehicle
+            if rel_pos[0] <= 0:
+                continue
 
             # NOTE: get obstacle size
             if isinstance(obstacle, gymnasium_driving.components.obstacles.Circle):

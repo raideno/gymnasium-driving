@@ -23,9 +23,9 @@ Make sure you have correctly setup the environment first.
 
 ```bash
 HYDRA_FULL_ERROR=1 python train.py \
-   	environment=discrete \
-   	controller=dqn \
-   	reward=path_progress \
+   	environment=continuous \
+   	controller=ppo-continuous \
+   	reward=reward \
    	total_timesteps=1000000 \
    	wrappers=\[with_path_info,with_obstacles_info,with_base_info,with_road_info\]
 ```
