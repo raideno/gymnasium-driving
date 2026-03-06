@@ -1,0 +1,42 @@
+{
+    "Clothoid Tentacles": {
+        "mean_reward": 341.4108621136451,
+        "std_reward": 400.08289498213,
+        "success_rate": 0.0,
+        "mean_cte": 0.5201716111909253,
+        "mean_heading_error": 0.14011325247591083,
+        "mean_steering_rate": 0.025343390358083865
+    },
+    "Pure Pursuit": {
+        "mean_reward": 645.145026748738,
+        "std_reward": 598.5608575776325,
+        "success_rate": 0.0,
+        "mean_cte": 0.13076667717238186,
+        "mean_heading_error": 0.027906795637782266,
+        "mean_steering_rate": 0.004813710058400345
+    },
+    "PPO": {
+        "mean_reward": 641.1484263301664,
+        "std_reward": 592.8839289253325,
+        "success_rate": 0.0,
+        "mean_cte": 1.252528347295018,
+        "mean_heading_error": 0.10156459358303586,
+        "mean_steering_rate": 0.021070765477115595
+    },
+    "TRPO": {
+        "mean_reward": 707.4378501128725,
+        "std_reward": 567.2784224139788,
+        "success_rate": 0.0,
+        "mean_cte": 0.8645531138250255,
+        "mean_heading_error": 0.08511325049964677,
+        "mean_steering_rate": 0.03397450443946992
+    },
+    "DQN": {
+        "mean_reward": 366.3513850931705,
+        "std_reward": 353.70729994914956,
+        "success_rate": 0.0,
+        "mean_cte": 1.184834870658782,
+        "mean_heading_error": 0.10034309131763708,
+        "mean_steering_rate": 0.524214322514168
+    }
+}

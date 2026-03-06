@@ -37,6 +37,10 @@ class WithBaseInfo(gymnasium.ObservationWrapper):
 
         new_spaces = dict(self.observation_space.spaces)
 
+        new_spaces["base/position"] = gymnasium.spaces.Box(
+            low=-numpy.inf, high=numpy.inf, shape=(2,), dtype=numpy.float32
+        )
+
         new_spaces["base/heading"] = gymnasium.spaces.Box(
             -numpy.pi, numpy.pi, shape=(1,), dtype=numpy.float32
         )
@@ -51,6 +55,11 @@ class WithBaseInfo(gymnasium.ObservationWrapper):
         self.observation_space = gymnasium.spaces.Dict(new_spaces)
 
     def observation(self, observation: dict) -> dict:
+        observation["base/position"] = numpy.array(
+            [self.env.unwrapped.state["x"], self.env.unwrapped.state["y"]],
+            dtype=numpy.float32,
+        )
+
         observation["base/heading"] = numpy.array(
             [self.env.unwrapped.state["yaw"]],
             dtype=numpy.float32,

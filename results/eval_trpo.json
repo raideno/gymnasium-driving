@@ -1,0 +1,8 @@
+{
+    "mean_reward": 707.4378501128725,
+    "std_reward": 567.2784224139788,
+    "success_rate": 0.0,
+    "mean_cte": 0.8645531138250255,
+    "mean_heading_error": 0.08511325049964677,
+    "mean_steering_rate": 0.03397450443946992
+}
