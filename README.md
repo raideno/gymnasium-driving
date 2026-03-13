@@ -11,6 +11,8 @@ pip install -e .
 cp .env.example .env
 ```
 
+`pip install -e .` will look at the [`pyproject.toml`](./pyproject.toml) and install all the required libraries, there is also a [`requirements.txt`](./requirements.txt).
+
 Then edit `.env` and set a valid `WANDB_API_KEY` (training logs are sent to Weights & Biases).
 
 ## Training architecture
