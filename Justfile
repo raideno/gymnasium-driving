@@ -10,9 +10,9 @@ setup:
 pack:
     npx repomix --ignore "notebooks/*" --output code.local.xml
 
-train total_timesteps="1000000" controller="dqn" reward="reward":
+train total_timesteps="1000000" controller="ppo-continuous" reward="reward":
     HYDRA_FULL_ERROR=1 {{ python }} train.py \
-    	environment=discrete \
+    	environment=continuous \
     	controller={{ controller }} \
     	reward={{ reward }} \
     	total_timesteps={{ total_timesteps }} \

@@ -36,9 +36,9 @@ def make_random_obstacles_factory(
     exclude_end     : 5.0 m from goal point
     """
 
-    _RADIUS = 1.5
-    _LATERAL_MEAN = 1.0
-    _LATERAL_STD = 0.3
+    _RADIUS = 1.25
+    _LATERAL_MEAN = 0
+    _LATERAL_STD = 0.0
     _EXCLUDE_START_M = 10
     _EXCLUDE_END_M = 10
 
