@@ -1,6 +1,6 @@
 # Training
 
-For environment usage and extension details, see [`gymnasium_driving/ENVIRONMENT.md`](./gymnasium_driving/ENVIRONMENT.md).
+For environment usage and extension details, see [`gymnasium_driving/README.md`](./gymnasium_driving/README.md).
 
 ## Setup
 
